@@ -1,0 +1,12 @@
+[project]
+name = "mate"
+version = "0.1.0"
+description = "A tool to run operations across multiple project folders."
+readme = "README.md"
+requires-python = ">=3.8"
+
+[project.scripts]
+mate = "mate.main:cli"
+
+[tool.setuptools.packages.find]
+where = ["src"]

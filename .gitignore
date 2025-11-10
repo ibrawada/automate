@@ -1,0 +1,8 @@
+﻿.vscode/launch.json
+ops/__pycache__
+.venv
+*.egg-info
+build
+.mate
+src/mate/__pycache__
+__pycache__/
