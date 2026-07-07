@@ -9,8 +9,8 @@ from typing import Any
 
 
 APP_NAME = "mate"
-GLOBAL_CONFIG_FILE = "global.ini"
-LOCAL_CONFIG_FILE = "local.ini"
+GLOBAL_CONFIG_FILE_NAME = "mate-global.conf"
+LOCAL_CONFIG_FILE_NAME = "mate-local.conf"
 CWD = Path(".")
 
 # ---- paths ---------------------------------------------------------------
@@ -25,137 +25,189 @@ def get_home_dir() -> Path:
     # Prefer Windows' %USERPROFILE% when available; fall back to Path.home()
     return Path(os.environ.get("USERPROFILE") or Path.home())
 
-def get_config_dir() -> Path:
+def get_local_config_dir() -> Path:
     return get_home_dir() / f".{APP_NAME}"
 
-def get_global_config_path() -> Path:
-    return get_config_dir() / GLOBAL_CONFIG_FILE
+def get_global_configfile_path() -> Path:
+    return get_local_config_dir() / GLOBAL_CONFIG_FILE_NAME
 
-def get_local_config_path() -> Path:
-    return CWD / Path(f".{APP_NAME}") / LOCAL_CONFIG_FILE
+def get_local_configfile_path() -> Path:
+    return CWD / Path(f".{APP_NAME}") / LOCAL_CONFIG_FILE_NAME
 
 
 # ---- config I/O ----------------------------------------------------------
 
-DEFAULT_LOCAL_CONFIG = {
+DEFAULT_LOCAL_CONFIG_CONTENT = {
     "folders": {
         "exclude":"['build']"
     }
 }
 
 
-DEFAULT_GLOBAL_CONFIG = {
+DEFAULT_GLOBAL_CONFIG_CONTENT = {
     "folders": {
         "exclude":"['.mate', '.git']"
+    },
+    "var":
+    {
+
     }
 }
 
-def ensure_config_exists(path, config) -> None:
-    """Create ~/.toolname/config.ini with defaults if it doesn't exist."""
-    cfg_path = path
-    cfg_dir = cfg_path.parent
-    cfg_dir.mkdir(parents=True, exist_ok=True)
 
-    if not cfg_path.exists():
-        cfg = ConfigParser()
-        for section, values in config.items():
-            cfg[section] = values
-        _atomic_write_config(cfg, cfg_path)
 
-def _atomic_write_config(cfg: dict, path: Path) -> None:
-    """Write config atomically to avoid partial files."""
-    tmp_path = path.with_suffix(path.suffix + ".tmp")
-    with tmp_path.open("w", encoding="utf-8") as f:
-        cfg.write(f)
-    tmp_path.replace(path)  # atomic on same filesystem
+def create_configfile_if_none(configfile_path, config_content) -> None:
+    config_home_dir = configfile_path.parent
+    config_home_dir.mkdir(parents=True, exist_ok=True)
+
+    if not configfile_path.exists():
+        config_object = ConfigParser()
+        for section, values in config_content.items():
+            config_object[section] = values
+        write_configfile(config_object, configfile_path)
+
+
+
+def write_configfile(config_object: dict, configfile_path: Path) -> None:
+    with configfile_path.open("w", encoding="utf-8") as f:
+        config_object.write(f)
+
+
 
 def load_config(path) -> ConfigParser:
-    """Load config, creating defaults if missing."""
-    cfg = ConfigParser()
-    
+    cfg = ConfigParser()    
     cfg.read(path, encoding="utf-8")
     return cfg
 
-def apply_overrides(cfg: ConfigParser, kv_pairs: list[str]) -> bool:
-    """
-    Apply key=value overrides. Keys can be 'section.key' or just 'key'
-    (which goes to [general]). Returns True if anything changed.
-    """
-    changed = False
-    for pair in kv_pairs:
-        if "=" not in pair:
-            raise ValueError(f"Invalid override '{pair}'. Use key=value.")
-        key, value = pair.split("=", 1)
-        if "." in key:
-            section, option = key.split(".", 1)
-        else:
-            section, option = "general", key
-        if not cfg.has_section(section):
-            cfg.add_section(section)
-        if cfg.get(section, option, fallback=None) != value:
-            cfg.set(section, option, value)
-            changed = True
-    return changed
+
+
+def append_config_value(config_object: ConfigParser, section: str, option: str, value: str) -> ConfigParser:    
+    # Case 1: If no section and option with the name -> create everything 
+    if not config_object.has_option(section, option):
+        if not config_object.has_section(section):
+            config_object.add_section(section)
+
+        config_object.set(section, option, value)
+        return config_object
+
+    # Read in existing value and check its type -> depending on whether list or not the append will differ
+    existing_value = config_object.get(section, option)
+    try:
+        existing_value_typed = ast.literal_eval(existing_value)
+    except (ValueError, SyntaxError):
+        existing_value_typed = existing_value        
+
+    if isinstance(existing_value_typed, list):
+        existing_value_typed.append(value)
+        config_object.set(section, option, str(existing_value_typed))
+    else: # Normal value -> override
+        config_object.set(section, option, value)
+
+    return config_object
 
 
 
-class Action(Enum):
-    APPEND = "append"
-    REMOVE = "remove"
+def override_config_value(config_object: ConfigParser, section: str, option: str, value: str) -> ConfigParser:
+    # This is only required/valid for option of type list
+    existing_value = config_object.get(section, option)
+    try:
+        existing_value_typed = ast.literal_eval(existing_value)
+    except (ValueError, SyntaxError):
+        existing_value_typed = existing_value
+
+    if isinstance(existing_value_typed, list):
+        config_object.set(section, option, value)
+    else:
+        print("[WARNING] Cannot override a value because the option is not of type list")
     
 
-def update_config(config_path: Path, settings: list[str], args: argparse.Namespace):
-    """Updates a configuration file with new settings."""
-    parser = ConfigParser()
-    parser.read(config_path)
+    return config_object
 
-    action = None
-    if not args.append and not args.remove:
-        action = Action.APPEND
-    elif args.append:
-        action = Action.APPEND
-    elif args.remove:
-        action = Action.REMOVE
+
+
+def remove_config_value(config_object: ConfigParser, section: str, option: str, value: str) -> ConfigParser:
+    # Check whether the section and option exist
+    # If only section provided -> remove the whole section
+    config_has_section = config_object.has_section(section)
+    config_has_option = config_object.has_option(section, option)
+    
+    # Remove section 
+    if section != "" and option == "" and value == "":
+        if not config_has_section:
+            print("[WARNING] Config has no section called {section}")
+            return config_object        
+        config_object.remove_section(section)
+    # Remove the option from config
+    elif section != "" and option != "" and value == "":
+        if not config_has_option:
+            print("[WARNING] Config has no section / option called {section}:{option}")
+            return config_object
+        config_object.remove_option(section, option)
+    # Remove value. This is only applicabale for lists
+    elif section != "" and option != "" and value != "":
+        # Check if the option exist and that its a list
+        existing_value = config_object.get(section, option)
+        try:
+            # Safely evaluate string to a Python literal (e.g., "['a', 'b']" -> ['a', 'b'])
+            # value = ast.literal_eval(existing_value)
+            existing_value_typed = ast.literal_eval(existing_value)
+        except (ValueError, SyntaxError):
+            existing_value_typed = existing_value
+
+        if isinstance(existing_value_typed, list):
+            existing_value_typed.remove(value)
+            config_object.set(section, option, str(existing_value_typed))
+        else:
+            print("[WARNING] Nothing has been removed. The provided syntax is only allowed for list type options")
+        # except (ValueError, SyntaxError):
+        #     # Not a literal, treat as a plain string
+        #     # value = value_str
+        #     print("[WARNING] Nothing has been removed. The provided syntax is only allowed for list type options")
+    else:
+        print("[WARNING] Wrong syntax used, nothing has been removed")
+
+    return config_object
+    
+
+def split_setting(setting: str) -> tuple[str, str, str]:
+    section = ""
+    option = ""
+    value = ""
+
+    if ":" in setting:
+        section, option_value = setting.split(':', 1)
+        
+        if "=" in option_value:
+            option, value = option_value.split('=', 1)
+        else:
+            # Only option provided
+            option = option_value
+
+    # only section provided nothing else
+    else:
+        section = setting
+
+    return (section, option, value)
+
+
+
+def update_configfiles(config_path: Path, settings: list[str], args: argparse.Namespace):
+    """Updates a configuration file with new settings."""
+    config_object = ConfigParser()
+    config_object.read(config_path)
 
     for setting in settings:
-        try:
-            key_part, new_value_str = setting.split('=', 1)
-            section, key = key_part.split(':', 1)
-        except ValueError:
-            print(f"Error: Invalid setting format '{setting}'. Use 'section:key=value'.")
-            continue
+        section, option, value = split_setting(setting)
+        if args.append:
+            append_config_value(config_object, section, option, value)
+        elif args.remove:
+            remove_config_value(config_object, section, option, value)
+        elif args.override:
+            override_config_value(config_object, section, option, value)
+        else:
+            append_config_value(config_object, section, option, value)
 
-        if not parser.has_section(section):
-            parser.add_section(section)
-
-
-        # Get the existing list from the config
-        if parser.has_option(section, key):
-            existing_value_str = parser.get(section, key)            
-            try:
-                existing_list = ast.literal_eval(existing_value_str)
-                if isinstance(existing_list, list):                    
-                    # Modify the list
-                    if action == Action.APPEND:
-                        existing_list.append(new_value_str)
-                    elif action == Action.REMOVE:
-                        if new_value_str in existing_list:
-                            existing_list.remove(new_value_str)
-                    
-                    parser.set(section, key, str(existing_list))
-                    print(f"Updated [{section}] {key} = {existing_list}")
-                else:
-                    parser.set(section, key, new_value_str)
-                    print(f"Set [{section}] {key} = {new_value_str}")
-            except: # If not a list then overwrite the value
-                parser.set(section, key, new_value_str)
-                print(f"Set [{section}] {key} = {new_value_str}")
-        else: # Set / create the entry
-            parser.set(section, key, new_value_str)
-            print(f"Set [{section}] {key} = {new_value_str}")
-
-
-    _atomic_write_config(parser, config_path)
+    write_configfile(config_object, config_path)
 
 # ---- CLI -----------------------------------------------------------------
 
@@ -171,6 +223,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Target the global configuration."
     )
     p.add_argument(
+        "--local", "-l",
+        dest="local_config",
+        action="store_true",
+        help="Target the local configuration (The default behaviour)."
+    )
+    p.add_argument(
         "--append", "-a",
         action="store_true",
         help="Append a value to a list in the config (not yet implemented)."
@@ -179,6 +237,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--remove", "-r",
         action="store_true",
         help="Remove a value from a list in the config (not yet implemented)."
+    )
+    p.add_argument(
+        "--override", "-o",
+        action="store_true",
+        help="Override a list based value in the config (not yet implemented)."
     )
     p.add_argument(
         "--show", 
@@ -196,7 +259,17 @@ def build_parser() -> argparse.ArgumentParser:
 # mate config --global|--local(default) exec.notepad="path/to/notepad"
 # mate config --local var.pre-commit="path/to/pre-commit.yml" 
 
-def _merge_configs(target_dict: dict, source_config: ConfigParser):
+def read_configfiles(configfiles: list[str]) -> dict[str, dict[str, Any]]:
+    combined_configs = {}
+    
+    for configfile in configfiles:
+        config_values = load_config(configfile)
+        merge_configs(target_dict=combined_configs,source_config=config_values)
+    
+    return combined_configs
+
+
+def merge_configs(target_dict: dict, source_config: ConfigParser):
     """
     Merges settings from a ConfigParser object into a dictionary.
     It handles string representations of lists by parsing and merging them.
@@ -217,50 +290,51 @@ def _merge_configs(target_dict: dict, source_config: ConfigParser):
                     target_dict[section][key].extend(value)
                 else:
                     target_dict[section][key] = value
-            else:
+            else: # Not a list option -> set/override the value
                 target_dict[section][key] = value
 
-def config_update(argv: list[str] | None = None):
+
+# This is first method to be called. It initialiazes the config files if required
+def initialize_configfiles():    
+    config_path = get_global_configfile_path()
+    create_configfile_if_none(config_path, DEFAULT_GLOBAL_CONFIG_CONTENT)
+    
+    config_path = get_local_configfile_path()
+    create_configfile_if_none(config_path, DEFAULT_LOCAL_CONFIG_CONTENT)    
+
+
+# Todo:
+# Add ability to show only local or global config values 
+# eg. "mate config --show --globa|--local"
+# -> This would mean that read_configfiles will have to accept parameters to which config shall be read in
+def handle_config_arguments(argv: list[str] | None = None):
     args = build_parser().parse_args(argv)
 
+
     if args.show:
-        configs = config_read()
+        configs = read_configfiles()
         print("--- Configuration ---")
-        print(f"-local config: {get_local_config_path()}")
-        print(f"-global config: {get_global_config_path()}")
+        print(f"-global config: {get_global_configfile_path()}")
+        print(f"-local config: {get_local_configfile_path()}")
         for section, map in configs.items():
             for k, v in map.items():
-                print(f"{section}.{k} = {v}")
+                print(f"{section}:{k} = {v}")
         return 0
 
     if args.settings:
         if args.global_config:
-            config_path = get_global_config_path()
-            ensure_config_exists(config_path, DEFAULT_GLOBAL_CONFIG)
+            config_path = get_global_configfile_path()
+            print(f"Updating global config file in {config_path}")
+            # create_configfile_if_none(config_path, DEFAULT_GLOBAL_CONFIG_CONTENT)
         else:
-            config_path = get_local_config_path()
-            ensure_config_exists(config_path, DEFAULT_LOCAL_CONFIG)
+            config_path = get_local_configfile_path()
+            print(f"Updating local config file in {config_path}")
+            # create_configfile_if_none(config_path, DEFAULT_LOCAL_CONFIG_CONTENT)
         
-        update_config(config_path, args.settings, args)
-        print(f"\nConfiguration updated in: {config_path}")
+        # print(f"Arguments values in handle_config_arguments: \n {args.settings} \n {args} ")
+        update_configfiles(config_path, args.settings, args)
+        # print(f"\nConfiguration updated in: {config_path}")
         return 0
 
-def config_read() -> dict[str, dict[str, Any]]:
-    # Load config every time the tool runs
-    global_path = get_global_config_path()
-    
-    ensure_config_exists(global_path, DEFAULT_GLOBAL_CONFIG)
-    cfg_global = load_config(global_path)
 
-    combined_configs_dict = {}
-    _merge_configs(combined_configs_dict, cfg_global)
 
-    if os.path.exists(get_local_config_path()):
-        local_path = get_local_config_path()
-        cfg_local = load_config(local_path)
-        _merge_configs(combined_configs_dict, cfg_local)
-
-    return combined_configs_dict
-
-if __name__ == "__main__":
-    raise SystemExit(config_main())
