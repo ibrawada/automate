@@ -54,27 +54,6 @@ def _construct_headers(token: str):
     return headers
 
 
-def build_parser(p: argparse.ArgumentParser) -> argparse.ArgumentParser:
-    """
-    Builds the argument parser for the gitea command.
-    """
-    subparsers = p.add_subparsers(dest="action", required=True, help="Gitea action")
-
-    # --- Subparser for 'create-pr' ---
-    pr_parser = subparsers.add_parser("create-pr", help="Create a pull request")
-    pr_parser.add_argument("--target-branch", required=True, help="Target branch for the PR")
-    pr_parser.add_argument("--source-branch", required=False, help="Source branch for the PR\nIf none provided then the current branch is taken as source")
-    pr_parser.add_argument("--title", required=True,default="Just another PR", help="Title of the pull request")
-
-    # --- Subparser for 'merge-pr' ---
-    merge_parser = subparsers.add_parser("merge-pr", help="Merge a pull request")
-    merge_parser.add_argument("--merge-method", default="merge",
-                              choices=['merge', 'rebase', 'rebase-merge', 'squash', 'manually-merged'],
-                              help="Merge method")
-    merge_parser.add_argument("--delete-branch", action="store_true", help="Delete source branch after merge")
-
-    return p
-
 
 def _create_pull_request(cwd, gitea_url, gitea_PAT, title, target_branch, source_branch = None):
     # Gather git information on the currently processed folder
@@ -173,6 +152,41 @@ def main(cwd, args, env: dict) -> int:
     
 
 
+def get_default_config() -> dict[str, dict[str, str]]:
+    return {
+        "gitea": 
+        {
+            "host" : "",
+            "token": ""
+        }
+    }
+
+
+
+
+def build_parser(p: argparse.ArgumentParser) -> argparse.ArgumentParser:
+    """
+    Builds the argument parser for the gitea command.
+    """
+    subparsers = p.add_subparsers(dest="action", required=True, help="Gitea action")
+
+    # --- Subparser for 'create-pr' ---
+    pr_parser = subparsers.add_parser("create-pr", help="Create a pull request")
+    pr_parser.add_argument("--target-branch", required=True, help="Target branch for the PR")
+    pr_parser.add_argument("--source-branch", required=False, help="Source branch for the PR\nIf none provided then the current branch is taken as source")
+    pr_parser.add_argument("--title", required=True,default="Just another PR", help="Title of the pull request")
+
+    # --- Subparser for 'merge-pr' ---
+    merge_parser = subparsers.add_parser("merge-pr", help="Merge a pull request")
+    merge_parser.add_argument("--merge-method", default="merge",
+                              choices=['merge', 'rebase', 'rebase-merge', 'squash', 'manually-merged'],
+                              help="Merge method")
+    merge_parser.add_argument("--delete-branch", action="store_true", help="Delete source branch after merge")
+
+    return p
+
+
+
 if __name__ == "__main__":
     parser = build_parser(
     # argparse.ArgumentParser(prog=f"{root_parser.prog} {root_args.command}")
@@ -180,7 +194,5 @@ if __name__ == "__main__":
     )
     parsed_args = parser.parse_args(args=sys.argv[1:])
 
-# gitea_token = b0d6d30ebb4ffbee368c1896a325264aaadc0dfc
-# gitea_host = http://gestigon-server:3030
     main("E:/Gitea/awada/TestSpace", parsed_args, { "gitea_host" :  "http://gestigon-server:3030",
                                                    "gitea_token" : "b0d6d30ebb4ffbee368c1896a325264aaadc0dfc"})

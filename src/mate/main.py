@@ -6,10 +6,11 @@ import subprocess
 import sys
 from pathlib import Path
 import importlib
+from types import ModuleType
 # For the executable
 from utilities import substitute_config_placeholders, extract_placeholders
-from config import get_global_configfile_path, get_local_configfile_path, initialize_configfiles, read_configfiles, handle_config_arguments, set_cwd
-
+# from config import get_global_configfile_path, get_local_configfile_path, initialize_configfiles, read_configfiles, handle_config_arguments, set_cwd
+import config
 # For debugging
 # from config import config_read, config_update, set_cwd
 
@@ -31,7 +32,7 @@ def run(cmd: list[str], cwd: str | None = None, check: bool = True) -> int:
 
 
 
-def direct_call(op_folders: list[str], args: list[str], folders_vars: dict) -> int:
+def execute_global_application(op_folders: list[str], args: list[str], folders_vars: dict) -> int:
     for folder in op_folders:
         args = substitute_local_variables(args, folders_vars[folder])
         run(args, cwd=folder, check=False)
@@ -54,27 +55,28 @@ def load_embedded_command(command):
 
 
 # This runs the python operations (not git, or notepad)
-def execute_embedded_commands(folders: list[str], command, args, configs_values: dict, folders_vars: dict) -> int:
-    # Run the module's entry (prefer .main, fallback to .run)
+def execute_embedded_command(command_name: str, command_arguments, command_configs: dict, folders: list[str],  folders_vars: dict) -> int:
+    
+    command_module = load_embedded_command(command_name)
 
-    if not hasattr(command, "main"):
-        print(f"Error no main entry point for {command}")
+    if not hasattr(command_module, "main"):
+        print(f"Error no main entry point for {command_module}")
         sys.exit(1)
 
     for folder in folders:
         # per = _with(args, cwd=Path(folder))
-        subst_args = substitute_local_variables(args, folders_vars[folder])
-        parser = command.build_parser(
+        subst_args = substitute_local_variables(command_arguments, folders_vars[folder])
+        parser = command_module.build_parser(
             # argparse.ArgumentParser(prog=f"{root_parser.prog} {root_args.command}")
             argparse.ArgumentParser(prog=f"Nothing to say")
         )
         parsed_args = parser.parse_args(subst_args)
-        # print(f"executing copy: {subst_args}")
-        command.main(folder, parsed_args, configs_values)
+        print(f"executing command {command_module.__name__}: {subst_args}")
+        command_module.main(folder, parsed_args, command_configs)
 
 
 # This runs the notepad (not python ops and not git)
-def forward_to_config_exes(folders: list[str], exe: str, args: list[str], folders_vars: dict) -> int:
+def execute_config_application(folders: list[str], exe: str, args: list[str], folders_vars: dict) -> int:
     for folder in folders:        
         args = substitute_local_variables(args, folders_vars[folder])
         run([exe, *args], cwd=folder)
@@ -93,23 +95,7 @@ def collect_folders(working_dir: Path, exclude_folders: list[str]) -> list[str]:
     return ret_folders
 
 
-def make_root_parser(commands):
-    p = argparse.ArgumentParser(
-        prog=f"python {Path(sys.argv[0]).name}",
-        description="command runner",
-        add_help=False,
-    )
-    
-    p.add_argument("command", nargs="?", help=f"One of: {', '.join(sorted(commands))}")
-    # p.add_argument("--cwd", type=Path, default=Path.cwd(),
-    #                help="Directory containing projects to operate on.")
-    p.add_argument("--cwd", type=Path, default=".",
-    # p.add_argument("--cwd", type=Path, default='E:/Gitea/_test_ProductsPipeline',
-                   help="Directory containing projects to operate on.\nDefault is the current open directory")
-    p.add_argument("-h", "--help", action="store_true", help="Show this help")
 
-    
-    return p
 
 
 # def substitute_placeholders(args: list[str], configs: dict) -> list[str]:
@@ -175,6 +161,44 @@ def substitue_argument_placeholders_from_configs(args: list[str], configs: dict[
     return ret_substituted_arguments
 
 
+def initialize_configfiles(command_names: list[str]):    
+    config_path = config.get_global_configfile_path()
+    global_config_created = config.create_configfile_if_none(config_path, config.DEFAULT_GLOBAL_CONFIG_CONTENT)
+    
+    config_path = config.get_local_configfile_path()
+    config.create_configfile_if_none(config_path, config.DEFAULT_LOCAL_CONFIG_CONTENT)    
+
+    if global_config_created:
+        # For each command write config file default values if nothing yet present
+        modules_config = {}
+        for command in command_names:
+            command_module = load_embedded_command(command)
+            config_values = command_module.get_default_config()
+            modules_config.update(config_values)
+        config.write_configfile(modules_config, config.get_global_configfile_path(), "a")
+
+
+
+def make_root_parser(commands):
+    p = argparse.ArgumentParser(
+        prog=f"python {Path(sys.argv[0]).name}",
+        description="command runner",
+        add_help=False,
+    )
+    
+    p.add_argument("command", nargs="?", help=f"One of: {', '.join(sorted(commands))}")
+    # p.add_argument("--cwd", type=Path, default=Path.cwd(),
+    #                help="Directory containing projects to operate on.")
+    p.add_argument("--cwd", type=Path, default=".",
+    # p.add_argument("--cwd", type=Path, default='E:/Gitea/_test_ProductsPipeline',
+                   help="Directory containing projects to operate on.\nDefault is the current open directory")
+    p.add_argument("-h", "--help", action="store_true", help="Show this help")
+
+    
+    return p
+
+
+
 def cli(cli_arguments=None):
     """Main command-line-interface entry point."""
     if cli_arguments is None:
@@ -184,30 +208,40 @@ def cli(cli_arguments=None):
     # This is only required if the cwd is not the call directory
     cwd_parser = argparse.ArgumentParser(add_help=False)
     cwd_parser.add_argument("--cwd", type=Path, default=".")
-    cwd_args, _ = cwd_parser.parse_known_args(cli_arguments)
-    set_cwd(cwd_args.cwd)
+    
+    cwd_config_args, command_arguments = cwd_parser.parse_known_args(cli_arguments)
+    config.set_cwd(cwd_config_args.cwd)
 
+
+
+    embedded_commands_names = collect_embedded_commands()
+    
     # Initialize config files is required
-    initialize_configfiles()
+    initialize_configfiles(embedded_commands_names)
 
-    if len(cli_arguments) >= 2 and cli_arguments[0] == "config":
-        return handle_config_arguments(sys.argv[2:])
+    # Check if command_arguments contains "config" instead of actual command (eg. [config, var:test=test])
+    # - has length more than 2 elements -> user provided a value to be modified
+    # - and if the 0th element is actually config -> only then update configs
+    if len(command_arguments) >= 2 and command_arguments[0] == "config":
+        # Provide only the config content to be update (strip the "config" from the list)
+        return config.handle_config_arguments(command_arguments[1:])
         
 
     # REQ-###: System shall load global config file first followed by local config file
     # REQ-###: System shall override global config value by local config value if present in both files
     # Current behaviour will load the 
-    configs = read_configfiles([get_global_configfile_path(), get_local_configfile_path()])
-    environment= configs.get("env", {})
+    configs_values = config.read_configfiles([config.get_global_configfile_path(), config.get_local_configfile_path()])
+    
+
+    # environment= configs.get("env", {})
 
     # Perform substitution on the raw argv before parsing
     # substituted_argv = substitute_placeholders(cli_arguments, configs)
-    substitued_arguments = substitue_argument_placeholders_from_configs(cli_arguments, configs)
+    substitued_arguments = substitue_argument_placeholders_from_configs(command_arguments, configs_values)
 
 
-    embedded_commands = collect_embedded_commands()
 
-    root_parser = make_root_parser(embedded_commands)
+    root_parser = make_root_parser(embedded_commands_names)
     root_args, rest_args = root_parser.parse_known_args(substitued_arguments)
     
     if root_args.help and not root_args.command:
@@ -218,36 +252,36 @@ def cli(cli_arguments=None):
         root_parser.error("a command is required.")
         return 1
 
-    folders = []
-    if configs["folders"].get("selection", ''):
-        entry = configs["folders"]["selection"]
-        selection = configs["folders"][entry]
-        print(f"selection: {selection}")
-        for folder in selection:
-            folders.append(str(Path(root_args.cwd, folder)))
-    else:
-        folders = collect_folders(root_args.cwd, configs["folders"]["exclude"])
+    # working_directories = []
+    # if configs_values["folders"].get("selection", ''):
+    #     entry = configs_values["folders"]["selection"]
+    #     selection = configs_values["folders"][entry]
+    #     print(f"selection: {selection}")
+    #     for folder in selection:
+    #         working_directories.append(str(Path(root_args.cwd, folder)))
+    # else:
+    working_directories = collect_folders(root_args.cwd, configs_values["folders"]["exclude"])
     
-    print("folder: ", folders)
-    # return
+    print("folder: ", working_directories)
+
     # Create variables that are local to a folder
     # ATM only folder_name is created
     folder_local_vars = {}
-    for folder in folders:
+    for folder in working_directories:
         folder_local_vars[folder] = create_local_variables(Path(folder))
         
-    # Execute a python script 
-    if root_args.command in embedded_commands:
-        operation = load_embedded_command(root_args.command)
-        return execute_embedded_commands(folders, operation, rest_args, environment, folder_local_vars)
-    exe_path = configs.get("exe", {}).get(root_args.command)
+    # Execute an embedded command (aka python script)
+    if root_args.command in embedded_commands_names:
+        return execute_embedded_command(root_args.command, rest_args, configs_values.get(root_args.command, {}), working_directories, folder_local_vars)
+    
+    executable_path = configs_values.get("executables", {}).get(root_args.command)
     # Execute an executable defined inside a config file
-    if exe_path:
-        return forward_to_config_exes(folders, exe_path, rest_args, folder_local_vars)
+    if executable_path:
+        return execute_config_application(working_directories, executable_path, rest_args, folder_local_vars)
     # Execute a globally callable executable
     else:
         # Treat as an external command to run in each folder
-        return direct_call(folders, substitued_arguments, folder_local_vars)
+        return execute_global_application(working_directories, substitued_arguments, folder_local_vars)
         # return direct_call(folders, [root_args.command, *rest_args])
 
 
@@ -259,3 +293,6 @@ if __name__ == "__main__":
     if str(SRC_DIR) not in sys.path:
         sys.path.insert(0, str(SRC_DIR))
     sys.exit(cli())
+
+
+#

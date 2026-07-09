@@ -48,7 +48,7 @@ DEFAULT_GLOBAL_CONFIG_CONTENT = {
     "folders": {
         "exclude":"['.mate', '.git']"
     },
-    "var":
+    "executables":
     {
 
     }
@@ -56,7 +56,7 @@ DEFAULT_GLOBAL_CONFIG_CONTENT = {
 
 
 
-def create_configfile_if_none(configfile_path, config_content) -> None:
+def create_configfile_if_none(configfile_path, config_content) -> bool:
     config_home_dir = configfile_path.parent
     config_home_dir.mkdir(parents=True, exist_ok=True)
 
@@ -66,11 +66,20 @@ def create_configfile_if_none(configfile_path, config_content) -> None:
             config_object[section] = values
         write_configfile(config_object, configfile_path)
 
+        return True
+    # Nothing has been created
+    return False
 
 
-def write_configfile(config_object: dict, configfile_path: Path) -> None:
-    with configfile_path.open("w", encoding="utf-8") as f:
-        config_object.write(f)
+
+def write_configfile(config_content: ConfigParser | dict, configfile_path: Path, mode: str = "w") -> None:
+    with configfile_path.open(mode, encoding="utf-8") as f:
+        if isinstance(config_content, dict):
+            configparser = ConfigParser()
+            configparser.read_dict(config_content)
+            configparser.write(f)
+        else:
+            config_content.write(f)
 
 
 
@@ -295,12 +304,6 @@ def merge_configs(target_dict: dict, source_config: ConfigParser):
 
 
 # This is first method to be called. It initialiazes the config files if required
-def initialize_configfiles():    
-    config_path = get_global_configfile_path()
-    create_configfile_if_none(config_path, DEFAULT_GLOBAL_CONFIG_CONTENT)
-    
-    config_path = get_local_configfile_path()
-    create_configfile_if_none(config_path, DEFAULT_LOCAL_CONFIG_CONTENT)    
 
 
 # Todo:
@@ -312,10 +315,16 @@ def handle_config_arguments(argv: list[str] | None = None):
 
 
     if args.show:
-        configs = read_configfiles()
+        configfiles = [get_global_configfile_path(), get_local_configfile_path()]
+        if args.local_config:
+            configfiles = [get_local_configfile_path()]
+        if args.global_config:
+            configfiles = [get_global_configfile_path()]
+
+        configs = read_configfiles(configfiles)
         print("--- Configuration ---")
-        print(f"-global config: {get_global_configfile_path()}")
-        print(f"-local config: {get_local_configfile_path()}")
+        # print(f"-global config: {get_global_configfile_path()}")
+        # print(f"-local config: {get_local_configfile_path()}")
         for section, map in configs.items():
             for k, v in map.items():
                 print(f"{section}:{k} = {v}")

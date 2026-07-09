@@ -49,6 +49,12 @@ def main(cwd, args, env: dict) -> int:
     return 0
 
 
+
+def get_default_config() -> dict[str, dict[str, str]]:
+    return {}
+    
+
+
 if __name__ == "__main__":
     parser = build_parser(
     # argparse.ArgumentParser(prog=f"{root_parser.prog} {root_args.command}")

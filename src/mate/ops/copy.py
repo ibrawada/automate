@@ -14,6 +14,18 @@ def build_parser(p: argparse.ArgumentParser) -> argparse.ArgumentParser:
                    help="Destination folder or full file path.")
     return p
 
+
+
+def get_default_config() -> dict[str, dict[str, str]]:
+    return {
+        "copy": 
+        {
+
+        }
+    }
+
+
+
 def main(cwd, args, env: dict) -> int:
     """
     Executes the copy operation based on parsed arguments.
