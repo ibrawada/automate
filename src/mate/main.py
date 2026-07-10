@@ -7,16 +7,14 @@ import sys
 from pathlib import Path
 import importlib
 from types import ModuleType
-# For the executable
-from utilities import substitute_config_placeholders, extract_placeholders
-# from config import get_global_configfile_path, get_local_configfile_path, initialize_configfiles, read_configfiles, handle_config_arguments, set_cwd
-import config
-# For debugging
-# from config import config_read, config_update, set_cwd
+
+from mate.utilities import substitute_config_placeholders, extract_placeholders
+from mate import config
 
 
 
-def run(cmd: list[str], cwd: str | None = None, check: bool = True) -> int:
+
+def run_application(cmd: list[str], cwd: str | None = None, check: bool = True) -> int:
     dirname = Path(cwd).name
     print(f"({dirname}/) :> '{' '.join(cmd)}")
 
@@ -35,11 +33,11 @@ def run(cmd: list[str], cwd: str | None = None, check: bool = True) -> int:
 def execute_global_application(op_folders: list[str], args: list[str], folders_vars: dict) -> int:
     for folder in op_folders:
         args = substitute_local_variables(args, folders_vars[folder])
-        run(args, cwd=folder, check=False)
-        # run(args, cwd=folder)
+        run_application(args, cwd=folder, check=False)
 
 
-# Todo: rename parent folder to commands
+
+# Todo: rename "ops" folder to commands
 def collect_embedded_commands() -> list[str]:
     ops_directory = Path(__file__).parent / "ops"
     names = sorted(
@@ -49,15 +47,10 @@ def collect_embedded_commands() -> list[str]:
 
 
 
-def load_embedded_command(command):
-    """Import ops.<cmd> and return the module."""
-    return importlib.import_module(f".ops.{command}", package="mate")
-
-
 # This runs the python operations (not git, or notepad)
 def execute_embedded_command(command_name: str, command_arguments, command_configs: dict, folders: list[str],  folders_vars: dict) -> int:
     
-    command_module = load_embedded_command(command_name)
+    command_module = importlib.import_module(f".ops.{command_name}", package="mate")
 
     if not hasattr(command_module, "main"):
         print(f"Error no main entry point for {command_module}")
@@ -75,11 +68,12 @@ def execute_embedded_command(command_name: str, command_arguments, command_confi
         command_module.main(folder, parsed_args, command_configs)
 
 
+
 # This runs the notepad (not python ops and not git)
 def execute_config_application(folders: list[str], exe: str, args: list[str], folders_vars: dict) -> int:
     for folder in folders:        
         args = substitute_local_variables(args, folders_vars[folder])
-        run([exe, *args], cwd=folder)
+        run_application([exe, *args], cwd=folder)
 
 
 
@@ -95,27 +89,6 @@ def collect_folders(working_dir: Path, exclude_folders: list[str]) -> list[str]:
     return ret_folders
 
 
-
-
-
-# def substitute_placeholders(args: list[str], configs: dict) -> list[str]:
-    """
-    Iterates through a list of arguments and replaces any variables
-    in the format @<section>.<key> with values from the configuration.
-        """
-    # arg_placeholders = {}
-    # for arg in args:
-    #     config_placeholders, function_placeholders = extract_placeholders(arg)
-    #     arg_placeholders[arg]= {
-    #             "config" : config_placeholders,
-    #             "function" : function_placeholders
-    #         }
-        
-    # for key, entries in arg_placeholders.items():
-    #     config_placeholders = entries["config"]
-    #     function_placeholders = entries["function"]
-    #     subst_key = substitute_config_placeholders(key, config_placeholders, configs)
-    #     print(subst_key)
 
 
 # Todo: This will be remove and replaced by running operations

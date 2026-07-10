@@ -1,9 +1,15 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "mate"
 version = "0.1.0"
-description = "A tool to run operations across multiple project folders."
+description = "Run operations across multiple project folders."
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.10"
+
+dependencies = ["requests"]
 
 [project.scripts]
 mate = "mate.main:cli"
