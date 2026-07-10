@@ -1,3 +1,6 @@
+import importlib
+from pathlib import Path
+
 def extract_placeholders(input: str) -> tuple[list[str], list[str]]:
     config_placeholders = []
     function_placeholders = []
@@ -29,11 +32,24 @@ def extract_placeholders(input: str) -> tuple[list[str], list[str]]:
     return (config_placeholders, function_placeholders)
 
 
+
 def substitute_config_placeholders(input: str, placeholders: list[str], config_values: dict) -> list[str]:
     substituted_tokens = input
 
     for placehoder in placeholders:
         section, entry = placehoder.split(':')
         substituted_tokens = substituted_tokens.replace(f"%{placehoder}%", config_values[section][entry])
+
+    return substituted_tokens
+
+
+
+def substitute_function_placeholders(input: str, placeholders: list[str], working_dir: Path) -> list[str]:
+    substituted_tokens = input
+
+    for placeholder in placeholders:
+        function_module = importlib.import_module(f".functions.{placeholder.removesuffix('[]')}", package="mate")
+        placeholder_value = function_module.run(working_dir)
+        substituted_tokens = substituted_tokens.replace(f"%{placeholder}%", placeholder_value)
 
     return substituted_tokens
