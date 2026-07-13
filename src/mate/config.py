@@ -6,6 +6,7 @@ from pathlib import Path
 from configparser import ConfigParser
 from enum import Enum
 from typing import Any
+from mate import output
 
 
 APP_NAME = "mate"
@@ -178,7 +179,7 @@ def remove_config_value(config_object: ConfigParser, section: str, option: str, 
     return config_object
     
 
-def split_setting(setting: str) -> tuple[str, str, str]:
+def split_config_setting(setting: str) -> tuple[str, str, str]:
     section = ""
     option = ""
     value = ""
@@ -200,13 +201,13 @@ def split_setting(setting: str) -> tuple[str, str, str]:
 
 
 
-def update_configfiles(config_path: Path, settings: list[str], args: argparse.Namespace):
+def update_configfile(config_path: Path, settings: list[str], args: argparse.Namespace):
     """Updates a configuration file with new settings."""
     config_object = ConfigParser()
     config_object.read(config_path)
 
     for setting in settings:
-        section, option, value = split_setting(setting)
+        section, option, value = split_config_setting(setting)
         if args.append:
             append_config_value(config_object, section, option, value)
         elif args.remove:
@@ -217,6 +218,45 @@ def update_configfiles(config_path: Path, settings: list[str], args: argparse.Na
             append_config_value(config_object, section, option, value)
 
     write_configfile(config_object, config_path)
+
+
+
+def read_configfiles(configfiles: list[str]) -> dict[str, dict[str, Any]]:
+    combined_configs = {}
+    
+    for configfile in configfiles:
+        config_values = load_config(configfile)
+        merge_configs(target_dict=combined_configs,source_config=config_values)
+    
+    return combined_configs
+
+
+
+def merge_configs(target_dict: dict, source_config: ConfigParser):
+    """
+    Merges settings from a ConfigParser object into a dictionary.
+    It handles string representations of lists by parsing and merging them.
+    """
+    for section in source_config.sections():
+        if section not in target_dict:
+            target_dict[section] = {}
+        for key, value_str in source_config.items(section):
+            try:
+                # Safely evaluate string to a Python literal (e.g., "['a', 'b']" -> ['a', 'b'])
+                value = ast.literal_eval(value_str)
+            except (ValueError, SyntaxError):
+                # Not a literal, treat as a plain string
+                value = value_str
+
+            if isinstance(value, list):# and key in target_dict[section] and isinstance(target_dict[section][key], list):
+                if key in target_dict[section]:
+                    target_dict[section][key].extend(value)
+                else:
+                    target_dict[section][key] = value
+            else: # Not a list option -> set/override the value
+                target_dict[section][key] = value
+
+
 
 # ---- CLI -----------------------------------------------------------------
 
@@ -265,47 +305,6 @@ def build_parser() -> argparse.ArgumentParser:
 
     return p
 
-# mate config --global|--local(default) exec.notepad="path/to/notepad"
-# mate config --local var.pre-commit="path/to/pre-commit.yml" 
-
-def read_configfiles(configfiles: list[str]) -> dict[str, dict[str, Any]]:
-    combined_configs = {}
-    
-    for configfile in configfiles:
-        config_values = load_config(configfile)
-        merge_configs(target_dict=combined_configs,source_config=config_values)
-    
-    return combined_configs
-
-
-def merge_configs(target_dict: dict, source_config: ConfigParser):
-    """
-    Merges settings from a ConfigParser object into a dictionary.
-    It handles string representations of lists by parsing and merging them.
-    """
-    for section in source_config.sections():
-        if section not in target_dict:
-            target_dict[section] = {}
-        for key, value_str in source_config.items(section):
-            try:
-                # Safely evaluate string to a Python literal (e.g., "['a', 'b']" -> ['a', 'b'])
-                value = ast.literal_eval(value_str)
-            except (ValueError, SyntaxError):
-                # Not a literal, treat as a plain string
-                value = value_str
-
-            if isinstance(value, list):# and key in target_dict[section] and isinstance(target_dict[section][key], list):
-                if key in target_dict[section]:
-                    target_dict[section][key].extend(value)
-                else:
-                    target_dict[section][key] = value
-            else: # Not a list option -> set/override the value
-                target_dict[section][key] = value
-
-
-# This is first method to be called. It initialiazes the config files if required
-
-
 # Todo:
 # Add ability to show only local or global config values 
 # eg. "mate config --show --globa|--local"
@@ -322,27 +321,23 @@ def handle_config_arguments(argv: list[str] | None = None):
             configfiles = [get_global_configfile_path()]
 
         configs = read_configfiles(configfiles)
-        print("--- Configuration ---")
-        # print(f"-global config: {get_global_configfile_path()}")
-        # print(f"-local config: {get_local_configfile_path()}")
+
+        output.info(f"Reading configuration files: {[str(p.resolve()) for p in configfiles]}")
         for section, map in configs.items():
             for k, v in map.items():
-                print(f"{section}:{k} = {v}")
+                output.message(f"{section}:{k} = {v}")
         return 0
 
     if args.settings:
         if args.global_config:
             config_path = get_global_configfile_path()
-            print(f"Updating global config file in {config_path}")
-            # create_configfile_if_none(config_path, DEFAULT_GLOBAL_CONFIG_CONTENT)
+            output.info(f"Updating global config file in {config_path}")
         else:
             config_path = get_local_configfile_path()
-            print(f"Updating local config file in {config_path}")
-            # create_configfile_if_none(config_path, DEFAULT_LOCAL_CONFIG_CONTENT)
+            output.info(f"Updating local config file in {config_path}")
         
-        # print(f"Arguments values in handle_config_arguments: \n {args.settings} \n {args} ")
-        update_configfiles(config_path, args.settings, args)
-        # print(f"\nConfiguration updated in: {config_path}")
+        update_configfile(config_path, args.settings, args)
+        
         return 0
 
 

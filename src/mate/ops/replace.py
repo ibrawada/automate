@@ -5,8 +5,6 @@ from pathlib import Path
 import sys
 
 def build_parser(p: argparse.ArgumentParser) -> argparse.ArgumentParser:
-    p.add_argument("--cwd", type=Path, default=Path.cwd(),
-                   help="Base dir for relative paths")
     p.add_argument("-f", "--file", required=True, help="Path to file")
     p.add_argument("-i", "--input", required=False, help="String to replace")
     p.add_argument("-o", "--output", required=False, help="Replacement string")
@@ -17,11 +15,11 @@ def build_parser(p: argparse.ArgumentParser) -> argparse.ArgumentParser:
     return p
 
 
+
 def main(cwd, args, env: dict) -> int:
     path = Path(cwd) / Path(args.file)
     old_text = path.read_text(encoding="utf-8")
 
-    # print("Replace.py")
     if args.input and args.output:
         new_text = old_text.replace(args.input, args.output)
     else:
@@ -31,7 +29,6 @@ def main(cwd, args, env: dict) -> int:
         input_text_line = ""
         text_line_found = False
         for _, text_line in enumerate(lines):
-            # print(f'text_line: {text_line}')
             if args.line in text_line:
                 input_text_line = text_line
                 text_line_found = True
@@ -41,10 +38,8 @@ def main(cwd, args, env: dict) -> int:
                     new_line = new_line + '\n' + text_line
                 break
         if text_line_found:
-            # print(f'input_text_line: {input_text_line} to be replace by {new_line}')
             new_text = old_text.replace(input_text_line, new_line)
 
-    # new_text = old_text.replace(args.input, args.output)
     path.write_text(new_text, encoding="utf-8")    
     return 0
 
@@ -57,10 +52,8 @@ def get_default_config() -> dict[str, dict[str, str]]:
 
 if __name__ == "__main__":
     parser = build_parser(
-    # argparse.ArgumentParser(prog=f"{root_parser.prog} {root_args.command}")
-    argparse.ArgumentParser(prog=f"Nothing to say")
+        argparse.ArgumentParser(prog=f"Nothing to say")
     )
     parsed_args = parser.parse_args(args=sys.argv[1:])
-
 
     main(parsed_args.cwd, parsed_args, {})

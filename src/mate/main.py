@@ -10,21 +10,24 @@ from types import ModuleType
 
 from mate import utilities
 from mate import config
+from mate import output
 
+ERROR_CODE = 127
 
 
 
 def run_application(application: str, cmd: list[str], working_dir: str, check: bool = True) -> int:
-    full_cmd = [application].extend(cmd)
+    full_cmd = [application]
+    full_cmd.extend(cmd)
 
-    print(f"({working_dir}/) :> '{' '.join(full_cmd)}")
+    output.info(f"{str(Path(working_dir).resolve())}> {' '.join(full_cmd)}")
 
     try:
         completed = subprocess.run(full_cmd, cwd=working_dir, check=check)
         return completed.returncode
     except FileNotFoundError as e:
-        print(f"[mate] ERROR: command not found: {full_cmd[0]}\n{e}", file=sys.stderr)
-        return 127
+        output.error(f"command not found: {full_cmd[0]}\n{e}")
+        return ERROR_CODE
     except subprocess.CalledProcessError as e:
         return e.returncode
 
@@ -34,7 +37,10 @@ def execute_global_application(application: str, args: list[str], working_dirs: 
     for dir in working_dirs:
         # args = utilities.substitute_local_variables(args, folders_vars[folder])
         args = substitute_arguments_function_placeholders(args, placeholders, dir)
-        run_application(application, args, working_dir=dir, check=False)
+        executation_state = run_application(application, args, working_dir=dir, check=False)
+        if executation_state != 0:
+            return executation_state
+    return 0
 
 
 
@@ -54,8 +60,8 @@ def execute_embedded_command(command_name: str, command_arguments, command_confi
     command_module = importlib.import_module(f".ops.{command_name}", package="mate")
 
     if not hasattr(command_module, "main"):
-        print(f"Error no main entry point for {command_module}")
-        sys.exit(1)
+        output.error(f"No main() entry point for {command_module}")
+        return ERROR_CODE
 
     for dir in working_dirs:
         subst_args = substitute_arguments_function_placeholders(command_arguments, placeholders, Path(dir))
@@ -65,7 +71,7 @@ def execute_embedded_command(command_name: str, command_arguments, command_confi
         )
         parsed_args = parser.parse_args(subst_args)
         
-        print(f"executing command {command_name}: {subst_args}")
+        output.info(f"executing command {command_name}: {subst_args}")
         
         command_module.main(dir, parsed_args, command_configs)
 

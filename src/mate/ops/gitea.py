@@ -5,7 +5,11 @@ import requests
 import argparse
 import subprocess
 from pathlib import Path
+from mate import output
 
+COMMAND_NAME = "gitea" 
+HOST = "host"
+TOKEN = "token"
 
 def _get_gitea_info(path: Path) -> dict | None:
     """
@@ -99,14 +103,13 @@ def _merge_pull_request(cwd, gitea_url, gitea_PAT, delete_branch = False,  merge
     for pr in prs:
         if pr["head"]["ref"] == from_branch:
             pr_index = pr["number"]
-            print(f'[gitea:merge-pr] Pull Request from {from_branch} to {pr["base"]["ref"]} has index: {pr_index} ')
+            output.info(f'[gitea:merge-pr] Pull Request from {from_branch} to {pr["base"]["ref"]} has index: {pr_index} ')
             break
         
     
     if pr_index != -1:
         # construct the url of the 
         url = f'{gitea_url}/api/v1/repos/{git_info["owner"]}/{git_info["repo"]}/pulls/{pr_index}/merge'
-        print(f"url: {url}")
         # construct the header of the request
         headers = _construct_headers(gitea_PAT)
         # construct the data of the request
@@ -117,12 +120,10 @@ def _merge_pull_request(cwd, gitea_url, gitea_PAT, delete_branch = False,  merge
         # call the api by providing the url, header, and data
         # https://docs.gitea.com/api/1.24/#tag/repository/operation/repoPullRequestIsMerged
         response = requests.post(url, headers=headers, json=data)
-        # response_json = response.json()
-        # print("pr-merge respone: ", response_json)
         # return the response of the api
         return response
     else:
-        print("[gitea:merge-pr] No pull request found")
+        output.warning("[gitea:merge-pr] No pull request found")
         return None
 
 
@@ -131,33 +132,33 @@ def main(cwd, args, env: dict) -> int:
     """
     Executes the gitea operation based on parsed arguments.
     """
-    if "gitea_host" not in env or "gitea_token" not in env:
-        print("Error: 'gitea_url' and 'gitea_token' must be defined in the [env] section of your config.")
+    if HOST not in env or TOKEN not in env:
+        output.error(f"'{HOST}' and '{TOKEN}' must be defined in the [{COMMAND_NAME}] section of your config.")
         return 1
     
     if args.action == "create-pr":
         response = _create_pull_request(
-           cwd, env["gitea_host"], env["gitea_token"], args.title, args.target_branch, args.source_branch
+           cwd, env[HOST], env[TOKEN], args.title, args.target_branch, args.source_branch
         )
         return 0
     elif args.action == "merge-pr":
         response = _merge_pull_request(
-            cwd, env["gitea_host"], env["gitea_token"], 
+            cwd, env[HOST], env[TOKEN], 
             args.delete_branch, args.merge_method 
         )
         return 0
     else:
-        print(f"Error: Unknown gitea action '{args.action}'")
+        output.error(f"Unknown gitea action '{args.action}'")
         return 1
     
 
 
 def get_default_config() -> dict[str, dict[str, str]]:
     return {
-        "gitea": 
+        COMMAND_NAME: 
         {
-            "host" : "",
-            "token": ""
+            HOST : "",
+            TOKEN: ""
         }
     }
 
@@ -189,10 +190,6 @@ def build_parser(p: argparse.ArgumentParser) -> argparse.ArgumentParser:
 
 if __name__ == "__main__":
     parser = build_parser(
-    # argparse.ArgumentParser(prog=f"{root_parser.prog} {root_args.command}")
-    argparse.ArgumentParser(prog=f"Nothing to say")
+        argparse.ArgumentParser(prog=f"Nothing to say")
     )
     parsed_args = parser.parse_args(args=sys.argv[1:])
-
-    main("E:/Gitea/awada/TestSpace", parsed_args, { "gitea_host" :  "http://gestigon-server:3030",
-                                                   "gitea_token" : "b0d6d30ebb4ffbee368c1896a325264aaadc0dfc"})

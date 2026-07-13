@@ -5,11 +5,11 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "mate"
 version = "0.1.0"
-description = "Run operations across multiple project folders."
+description = "Run repetitive operations across multiple project folders."
 readme = "README.md"
 requires-python = ">=3.10"
 
-dependencies = ["requests"]
+dependencies = ["requests", "colorama"]
 
 [project.scripts]
 mate = "mate.main:cli"
