@@ -175,7 +175,7 @@ def build_parser(p: argparse.ArgumentParser) -> argparse.ArgumentParser:
     pr_parser = subparsers.add_parser("create-pr", help="Create a pull request")
     pr_parser.add_argument("--target-branch", required=True, help="Target branch for the PR")
     pr_parser.add_argument("--source-branch", required=False, help="Source branch for the PR\nIf none provided then the current branch is taken as source")
-    pr_parser.add_argument("--title", required=True,default="Just another PR", help="Title of the pull request")
+    pr_parser.add_argument("--title", required=False,default="Just another PR", help="Title of the pull request")
 
     # --- Subparser for 'merge-pr' ---
     merge_parser = subparsers.add_parser("merge-pr", help="Merge a pull request")
