@@ -2,11 +2,13 @@
 import argparse
 import os
 import re
+import shutil
 import subprocess
 import sys
 from pathlib import Path
 import importlib
 from types import ModuleType
+import copy
 
 from mate import utilities
 from mate import config
@@ -36,10 +38,52 @@ def run_application(application: str, cmd: list[str], working_dir: str, check: b
 def execute_global_application(application: str, args: list[str], working_dirs: list[str], placeholders: dict) -> int:
     for dir in working_dirs:
         # args = utilities.substitute_local_variables(args, folders_vars[folder])
-        args = substitute_arguments_function_placeholders(args, placeholders, dir)
+        args = substitute_arguments_function_placeholders(args, placeholders, Path(dir))
         executation_state = run_application(application, args, working_dir=dir, check=False)
         if executation_state != 0:
             return executation_state
+    return 0
+
+
+
+def is_globally_callable_command(command_name: str) -> bool:
+    return shutil.which(command_name) != None
+
+
+def get_shell_command(configs: dict) -> list[str]:    
+    if sys.platform.startswith("win"):
+        shell_app = configs["shell"]["windows"]
+        return [shell_app, "-NoProfile", "-Command"]
+    
+    elif sys.platform.startswith("linux"):
+        shell_app = configs["shell"]["linux"]
+        return [shell_app, "-c"]
+    else:
+        output.error("No shell application defined")
+        return []
+    
+
+def execute_shell_command(application: str, args: list[str], shell_command: list[str], working_dirs: list[str], placeholders: dict) -> int:
+    full_cmd = shell_command
+    full_cmd.extend([application])
+    
+    if len(shell_command) == 0:
+        output.error("No shell command provided")
+        return ERROR_CODE
+    
+    for current_dir in working_dirs:
+        args = substitute_arguments_function_placeholders(args, placeholders, Path(current_dir))
+        shell_cmd = copy.deepcopy(full_cmd)
+        
+        shell_cmd.extend(args)
+
+        print(f"shell_cmd: {shell_cmd}")
+
+        output.info(f"{str(Path(current_dir).resolve())}> {' '.join(shell_cmd)}")
+
+        execution_result = subprocess.run(shell_cmd, cwd=current_dir, capture_output=True, text=True)
+        if execution_result.returncode != 0:
+            return execution_result.returncode 
     return 0
 
 
@@ -229,9 +273,15 @@ def cli(cli_arguments=None):
     
     # Case 3:
     # Execute a globally callable executable
-    else:
+    # todo: Add a function that will check if the command is a globally callable command
+    globall_callable_command = is_globally_callable_command(command_name)
+    if globall_callable_command:
         # Treat as an external command to run in each folder
         return execute_global_application(command_name, substitued_arguments, working_directories, extracted_placeholders)
+
+    else:
+        shell_command = get_shell_command(configs_values)
+        return execute_shell_command(command_name, substitued_arguments, shell_command, working_directories, extracted_placeholders)
 
 
 

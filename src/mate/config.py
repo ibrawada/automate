@@ -52,6 +52,11 @@ DEFAULT_GLOBAL_CONFIG_CONTENT = {
     "executables":
     {
 
+    },
+    "shell":
+    {
+        "windows" : "powershell",
+        "linux": "/bin/bash"
     }
 }
 
