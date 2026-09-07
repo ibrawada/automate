@@ -2,6 +2,8 @@ from __future__ import annotations
 import argparse
 import os
 import ast
+import sys
+import importlib
 from pathlib import Path
 from configparser import ConfigParser
 from enum import Enum
@@ -59,6 +61,9 @@ DEFAULT_GLOBAL_CONFIG_CONTENT = {
         "linux": "/bin/bash"
     }
 }
+
+
+
 
 
 
@@ -184,23 +189,28 @@ def remove_config_value(config_object: ConfigParser, section: str, option: str, 
     return config_object
     
 
-def split_config_setting(setting: str) -> tuple[str, str, str]:
+def split_config_entry(setting: str) -> tuple[str, str, str]:
+    # Perform error checks
     section = ""
     option = ""
     value = ""
 
-    if ":" in setting:
-        section, option_value = setting.split(':', 1)
+    if not ":" in setting or not "=" in setting:
+        output.error(f"Wrong syntax for the provided setting: {setting}. Always use <section>:<entry>=<value> Syntax")
+        sys.exit(1)
+    # if ":" in setting:
+    section, option_value = setting.split(':', 1)
         
-        if "=" in option_value:
-            option, value = option_value.split('=', 1)
-        else:
-            # Only option provided
-            option = option_value
+        # if "=" in option_value:
+    option, value = option_value.split('=', 1)
+        # else:
+        #     # Only option provided
+        #     option = option_value
 
     # only section provided nothing else
-    else:
-        section = setting
+    # TODO: Check when this case happens
+    # else:
+    #     section = setting
 
     return (section, option, value)
 
@@ -212,7 +222,11 @@ def update_configfile(config_path: Path, settings: list[str], args: argparse.Nam
     config_object.read(config_path)
 
     for setting in settings:
-        section, option, value = split_config_setting(setting)
+        section, option, value, status = split_config_entry(setting)
+
+        if status == False:
+            return
+        
         if args.append:
             append_config_value(config_object, section, option, value)
         elif args.remove:
@@ -223,17 +237,6 @@ def update_configfile(config_path: Path, settings: list[str], args: argparse.Nam
             append_config_value(config_object, section, option, value)
 
     write_configfile(config_object, config_path)
-
-
-
-def read_configfiles(configfiles: list[str]) -> dict[str, dict[str, Any]]:
-    combined_configs = {}
-    
-    for configfile in configfiles:
-        config_values = load_config(configfile)
-        merge_configs(target_dict=combined_configs,source_config=config_values)
-    
-    return combined_configs
 
 
 
@@ -262,8 +265,16 @@ def merge_configs(target_dict: dict, source_config: ConfigParser):
                 target_dict[section][key] = value
 
 
+def read_configfiles(configfiles: list[str]) -> dict[str, dict[str, Any]]:
+    combined_configs = {}
+    
+    for configfile in configfiles:
+        config_values = load_config(configfile)
+        merge_configs(target_dict=combined_configs, source_config=config_values)
+    
+    return combined_configs
 
-# ---- CLI -----------------------------------------------------------------
+
 
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(

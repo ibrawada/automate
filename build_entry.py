@@ -1,5 +1,5 @@
-from mate.main import cli
+from mate.main import main
 
 
 if __name__ == "__main__":
-    raise SystemExit(cli())
+    raise SystemExit(main())

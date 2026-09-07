@@ -10,7 +10,8 @@ import importlib
 from types import ModuleType
 import copy
 
-from mate import utilities
+# from mate import utilities
+from mate import placeholderslib
 from mate import config
 from mate import output
 
@@ -35,19 +36,20 @@ def run_application(application: str, cmd: list[str], working_dir: str, check: b
 
 
 
+def is_globally_callable_command(command_name: str) -> bool:
+    return shutil.which(command_name) != None
+
+
+
 def execute_global_application(application: str, args: list[str], working_dirs: list[str], placeholders: dict) -> int:
     for dir in working_dirs:
         # args = utilities.substitute_local_variables(args, folders_vars[folder])
-        args = substitute_arguments_function_placeholders(args, placeholders, Path(dir))
+        args = placeholderslib.substitute_arguments_function_placeholders(args, placeholders, Path(dir))
         executation_state = run_application(application, args, working_dir=dir, check=False)
-        if executation_state != 0:
-            return executation_state
+        # if executation_state != 0:
+        #     return executation_state
     return 0
 
-
-
-def is_globally_callable_command(command_name: str) -> bool:
-    return shutil.which(command_name) != None
 
 
 def get_shell_command(configs: dict) -> list[str]:    
@@ -58,10 +60,12 @@ def get_shell_command(configs: dict) -> list[str]:
     elif sys.platform.startswith("linux"):
         shell_app = configs["shell"]["linux"]
         return [shell_app, "-c"]
-    else:
-        output.error("No shell application defined")
-        return []
     
+    else:
+        output.error("No shell application defined in global/local config files")
+        sys.exit(ERROR_CODE)
+    
+
 
 def execute_shell_command(application: str, args: list[str], shell_command: list[str], working_dirs: list[str], placeholders: dict) -> int:
     full_cmd = shell_command
@@ -69,10 +73,10 @@ def execute_shell_command(application: str, args: list[str], shell_command: list
     
     if len(shell_command) == 0:
         output.error("No shell command provided")
-        return ERROR_CODE
+        sys.exit(ERROR_CODE)
     
     for current_dir in working_dirs:
-        args = substitute_arguments_function_placeholders(args, placeholders, Path(current_dir))
+        args = placeholders.substitute_arguments_function_placeholders(args, placeholders, Path(current_dir))
         shell_cmd = copy.deepcopy(full_cmd)
         
         shell_cmd.extend(args)
@@ -82,8 +86,9 @@ def execute_shell_command(application: str, args: list[str], shell_command: list
         output.info(f"{str(Path(current_dir).resolve())}> {' '.join(shell_cmd)}")
 
         execution_result = subprocess.run(shell_cmd, cwd=current_dir, capture_output=True, text=True)
-        if execution_result.returncode != 0:
-            return execution_result.returncode 
+        # TODO: Replace this with Error logging and implement --retry functionality
+        # if execution_result.returncode != 0:
+        #     return execution_result.returncode 
     return 0
 
 
@@ -108,7 +113,7 @@ def execute_embedded_command(command_name: str, command_arguments, command_confi
         return ERROR_CODE
 
     for dir in working_dirs:
-        subst_args = substitute_arguments_function_placeholders(command_arguments, placeholders, Path(dir))
+        subst_args = placeholders.substitute_arguments_function_placeholders(command_arguments, placeholders, Path(dir))
         
         parser = command_module.build_parser(
             argparse.ArgumentParser(prog=f"Nothing to say")
@@ -124,8 +129,8 @@ def execute_embedded_command(command_name: str, command_arguments, command_confi
 # This runs the notepad (not python ops and not git)
 def execute_config_application(application: str, args: list[str], working_dirs: list[str], placeholders: dict) -> int:
     for dir in working_dirs:        
-        args = substitute_arguments_function_placeholders(args, placeholders, dir)
-        run_application([application, *args], dir)
+        args = placeholders.substitute_arguments_function_placeholders(args, placeholders, dir)
+        run_application(application, [*args], working_dir=dir)
 
 
 
@@ -138,61 +143,6 @@ def collect_folders(main_directory: Path, exclude_folders: list[str]) -> list[st
         if child_item.is_dir():
             ret_folders.append(str(child_item))
     return ret_folders
-
-
-
-def extract_argument_placeholders(arguments: list[str]) -> dict:
-    argument_placeholders = {}
-    for arg in arguments:
-        config_placeholders, function_placeholders = utilities.extract_placeholders(arg)
-        argument_placeholders[arg]= {
-                "config" : config_placeholders,
-                "function" : function_placeholders
-            }
-        
-    return argument_placeholders
-
-
-
-def substitute_arguments_function_placeholders(args: list[str], arg_placeholders: dict, working_dir: Path) -> list[str]:
-    ret_substituted_arguments = []
-        
-    for argument, placeholders in arg_placeholders.items():
-        function_placeholders = placeholders["function"]
-        substituted_argument = utilities.substitute_function_placeholders(argument, function_placeholders, working_dir)
-        ret_substituted_arguments.append(substituted_argument)
-
-    return ret_substituted_arguments    
-
-
-
-def substitute_argument_placeholders_from_configs(args: list[str], argument_placeholders: dict, configs: dict[str, dict[str, str]]) -> list[str]:
-    ret_substituted_arguments = []
-        
-    for argument, placeholders in argument_placeholders.items():
-        config_placeholders = placeholders["config"]
-        substituted_argument = utilities.substitute_config_placeholders(argument, config_placeholders, configs)
-        ret_substituted_arguments.append(substituted_argument)
-
-    return ret_substituted_arguments
-
-
-
-def initialize_configfiles(command_names: list[str]):    
-    config_path = config.get_global_configfile_path()
-    global_config_created = config.create_configfile_if_none(config_path, config.DEFAULT_GLOBAL_CONFIG_CONTENT)
-    
-    config_path = config.get_local_configfile_path()
-    config.create_configfile_if_none(config_path, config.DEFAULT_LOCAL_CONFIG_CONTENT)    
-
-    if global_config_created:
-        # For each command write config file default values if nothing yet present
-        modules_config = {}
-        for command in command_names:
-            command_module = importlib.import_module(f".ops.{command}", package="mate")
-            config_values = command_module.get_default_config()
-            modules_config.update(config_values)
-        config.write_configfile(modules_config, config.get_global_configfile_path(), "a")
 
 
 
@@ -210,7 +160,28 @@ def create_command_parser(commands):
 
 
 
-def cli(cli_arguments=None):
+def initialize_configfiles(command_names: list[str]):    
+    config_path = config.get_global_configfile_path()
+    global_config_created = config.create_configfile_if_none(config_path, config.DEFAULT_GLOBAL_CONFIG_CONTENT)
+    
+    config_path = config.get_local_configfile_path()
+    config.create_configfile_if_none(config_path, config.DEFAULT_LOCAL_CONFIG_CONTENT)    
+
+    # Only populate global config file with default options from embedded commands if the global config was just created
+    # TODO: Change the behaviour to check for existance of a section + entry. If not add it, else continue
+    # This shall be the behaviour with which newly added and already existing modules will populate the config files
+    if global_config_created:
+        # For each command write config file default values if nothing yet present
+        modules_config = {}
+        for command in command_names:
+            command_module = importlib.import_module(f".ops.{command}", package="mate")
+            config_values = command_module.get_default_config()
+            modules_config.update(config_values)
+        config.write_configfile(modules_config, config.get_global_configfile_path(), "a")
+
+
+
+def main(cli_arguments=None):
     """Main command-line-interface entry point."""
     if cli_arguments is None:
         cli_arguments = sys.argv[1:]
@@ -256,8 +227,8 @@ def cli(cli_arguments=None):
     working_directories = collect_folders(current_working_dir, configs_values["folders"]["exclude"])
 
 
-    extracted_placeholders = extract_argument_placeholders(rest_arguments)
-    substitued_arguments = substitute_argument_placeholders_from_configs(rest_arguments, extracted_placeholders, configs_values)
+    extracted_placeholders = placeholderslib.extract_argument_placeholders(rest_arguments)
+    substitued_arguments = placeholderslib.substitute_argument_placeholders_from_configs(rest_arguments, extracted_placeholders, configs_values)
 
     ## Case 1:
     # Execute an embedded command (aka python script)
@@ -292,6 +263,6 @@ if __name__ == "__main__":
     SRC_DIR = Path(__file__).resolve().parent.parent
     if str(SRC_DIR) not in sys.path:
         sys.path.insert(0, str(SRC_DIR))
-    sys.exit(cli())
+    sys.exit(main())
 
 

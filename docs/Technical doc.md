@@ -1,3 +1,48 @@
+# Mate Specification
+
+## 1. Goal
+
+## 2. Concepts
+- Workspace
+- Project folder
+- Global config
+- Local config
+- Command
+- Placeholder
+
+## 3. Features
+
+### Feature 1: Configuration
+- User stories
+- Requirements
+- Acceptance criteria
+- Open questions
+
+### Feature 2: Placeholder Resolution
+- User stories
+- Requirements
+- Acceptance criteria
+- Open questions
+
+### Feature 3: Command Resolution
+- User stories
+- Requirements
+- Acceptance criteria
+- Open questions
+
+### Feature 4: Execution
+- User stories
+- Requirements
+- Acceptance criteria
+- Open questions
+
+### Feature 5: Logging and Continue
+- User stories
+- Requirements
+- Acceptance criteria
+- Open questions
+
+
 User stories
 - As a dev i want to instructs mate which command type to execute so that it doesn't execute identically called and preferenced but wrong command type
 
