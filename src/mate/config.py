@@ -1,44 +1,16 @@
 from __future__ import annotations
 import argparse
-import os
 import ast
 import sys
-import importlib
 from pathlib import Path
 from configparser import ConfigParser
 from enum import Enum
 from typing import Any
+
 from mate import output
 
 
-APP_NAME = "mate"
-GLOBAL_CONFIG_FILE_NAME = "mate-global.conf"
-LOCAL_CONFIG_FILE_NAME = "mate-local.conf"
-CWD = Path(".")
 
-# ---- paths ---------------------------------------------------------------
-def set_cwd(path: Path):
-    global CWD
-    CWD = path
-
-def get_cwd() -> Path:
-    return CWD
-
-def get_home_dir() -> Path:
-    # Prefer Windows' %USERPROFILE% when available; fall back to Path.home()
-    return Path(os.environ.get("USERPROFILE") or Path.home())
-
-def get_local_config_dir() -> Path:
-    return get_home_dir() / f".{APP_NAME}"
-
-def get_global_configfile_path() -> Path:
-    return get_local_config_dir() / GLOBAL_CONFIG_FILE_NAME
-
-def get_local_configfile_path() -> Path:
-    return CWD / Path(f".{APP_NAME}") / LOCAL_CONFIG_FILE_NAME
-
-
-# ---- config I/O ----------------------------------------------------------
 
 DEFAULT_LOCAL_CONFIG_CONTENT = {
     "folders": {
@@ -61,9 +33,6 @@ DEFAULT_GLOBAL_CONFIG_CONTENT = {
         "linux": "/bin/bash"
     }
 }
-
-
-
 
 
 
@@ -93,8 +62,17 @@ def write_configfile(config_content: ConfigParser | dict, configfile_path: Path,
             config_content.write(f)
 
 
+def configparser_to_dict(config_object: ConfigParser) -> dict:
+    ret_dict = {}
 
-def load_config(path) -> ConfigParser:
+    for section in config_object.sections():
+        ret_dict[section] = dict(config_object.items(section))
+
+    return ret_dict
+
+
+
+def load_config(path: str) -> ConfigParser:
     cfg = ConfigParser()    
     cfg.read(path, encoding="utf-8")
     return cfg
@@ -189,23 +167,18 @@ def remove_config_value(config_object: ConfigParser, section: str, option: str, 
     return config_object
     
 
-def split_config_entry(setting: str) -> tuple[str, str, str]:
-    # Perform error checks
+def split_config_entry(config_entry: str) -> tuple[str, str, str]:
     section = ""
     option = ""
     value = ""
 
-    if not ":" in setting or not "=" in setting:
-        output.error(f"Wrong syntax for the provided setting: {setting}. Always use <section>:<entry>=<value> Syntax")
+    # Perform error checks
+    if not ":" in config_entry or not "=" in config_entry:
+        output.error(f"Wrong syntax for the provided setting: {config_entry}. Always use <section>:<entry>=<value> Syntax")
         sys.exit(1)
-    # if ":" in setting:
-    section, option_value = setting.split(':', 1)
-        
-        # if "=" in option_value:
+
+    section, option_value = config_entry.split(':', 1)
     option, value = option_value.split('=', 1)
-        # else:
-        #     # Only option provided
-        #     option = option_value
 
     # only section provided nothing else
     # TODO: Check when this case happens
@@ -222,10 +195,7 @@ def update_configfile(config_path: Path, settings: list[str], args: argparse.Nam
     config_object.read(config_path)
 
     for setting in settings:
-        section, option, value, status = split_config_entry(setting)
-
-        if status == False:
-            return
+        section, option, value  = split_config_entry(setting)
         
         if args.append:
             append_config_value(config_object, section, option, value)
@@ -265,6 +235,7 @@ def merge_configs(target_dict: dict, source_config: ConfigParser):
                 target_dict[section][key] = value
 
 
+
 def read_configfiles(configfiles: list[str]) -> dict[str, dict[str, Any]]:
     combined_configs = {}
     
@@ -276,85 +247,9 @@ def read_configfiles(configfiles: list[str]) -> dict[str, dict[str, Any]]:
 
 
 
-def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(
-        prog=APP_NAME,
-        description=f"{APP_NAME}: example tool that uses a per-user config file",
-    )
-    p.add_argument(
-        "--global", "-g",
-        dest="global_config",
-        action="store_true",
-        help="Target the global configuration."
-    )
-    p.add_argument(
-        "--local", "-l",
-        dest="local_config",
-        action="store_true",
-        help="Target the local configuration (The default behaviour)."
-    )
-    p.add_argument(
-        "--append", "-a",
-        action="store_true",
-        help="Append a value to a list in the config (not yet implemented)."
-    )
-    p.add_argument(
-        "--remove", "-r",
-        action="store_true",
-        help="Remove a value from a list in the config (not yet implemented)."
-    )
-    p.add_argument(
-        "--override", "-o",
-        action="store_true",
-        help="Override a list based value in the config (not yet implemented)."
-    )
-    p.add_argument(
-        "--show", 
-        action="store_true",
-        help="Remove a value from a list in the config (not yet implemented)."
-    )
-    p.add_argument(
-        "settings",
-        nargs="*",
-        help="Settings to update, in 'section:key=value' format."
-    )
-
-    return p
-
-# Todo:
-# Add ability to show only local or global config values 
-# eg. "mate config --show --globa|--local"
-# -> This would mean that read_configfiles will have to accept parameters to which config shall be read in
-def handle_config_arguments(argv: list[str] | None = None):
-    args = build_parser().parse_args(argv)
-
-
-    if args.show:
-        configfiles = [get_global_configfile_path(), get_local_configfile_path()]
-        if args.local_config:
-            configfiles = [get_local_configfile_path()]
-        if args.global_config:
-            configfiles = [get_global_configfile_path()]
-
-        configs = read_configfiles(configfiles)
-
-        output.info(f"Reading configuration files: {[str(p.resolve()) for p in configfiles]}")
-        for section, map in configs.items():
-            for k, v in map.items():
-                output.message(f"{section}:{k} = {v}")
-        return 0
-
-    if args.settings:
-        if args.global_config:
-            config_path = get_global_configfile_path()
-            output.info(f"Updating global config file in {config_path}")
-        else:
-            config_path = get_local_configfile_path()
-            output.info(f"Updating local config file in {config_path}")
-        
-        update_configfile(config_path, args.settings, args)
-        
-        return 0
-
+def show_config_values(configs: dict):    
+    for section, map in configs.items():
+        for k, v in map.items():
+            output.message(f"{section}:{k} = {v}")
 
 

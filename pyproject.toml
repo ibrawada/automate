@@ -12,7 +12,7 @@ requires-python = ">=3.10"
 dependencies = ["requests", "colorama"]
 
 [project.scripts]
-mate = "mate.main:cli"
+mate = "mate.main:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
