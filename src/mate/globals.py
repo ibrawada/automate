@@ -9,10 +9,11 @@ SUCCESS_CODE = 0
 
 
 APP_NAME = "mate"
-GLOBAL_CONFIG_FILE_NAME = "mate-global.conf"
-LOCAL_CONFIG_FILE_NAME = "mate-local.conf"
+GLOBAL_CONFIG_FILE_NAME = "mate-global.toml"
+LOCAL_CONFIG_FILE_NAME = "mate-local.toml"
 CWD = Path(".")
 
+EMBEDDED_COMMANDS_FOLDER = "ops"
 
 def set_cwd(path: Path):
     global CWD

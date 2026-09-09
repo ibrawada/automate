@@ -1,5 +1,7 @@
 import argparse
 import importlib
+from pathlib import Path
+from typing import Any
 
 from mate import config
 from mate import output
@@ -24,6 +26,38 @@ def initialize_configfiles(command_names: list[str]):
             config_values = command_module.get_default_config()
             modules_config.update(config_values)
         config.write_configfile(modules_config, config.get_global_configfile_path(), "a")
+
+
+
+def read_configfiles(configfiles: list[str]) -> dict[str, Any]:
+    combined_configs = {}
+    
+    for configfile in configfiles:
+        config_values = config.load_config(configfile)
+        config.merge_configs(target_dict=combined_configs, source_config=config_values)
+    
+    return combined_configs
+
+
+
+def update_configfile(config_path: Path, settings: list[str], args: argparse.Namespace):
+    """Updates a configuration file with new settings."""
+    config_object = config.load_config(config_path)
+
+    for setting in settings:
+        section, option, value  = config.split_config_entry(setting)
+        
+        if args.append:
+            config.append_config_value(config_object, section, option, value)
+        elif args.remove:
+            config.remove_config_entry(config_object, section, option, value)
+        elif args.override:
+            config.override_config_value(config_object, section, option, value)
+        else:
+            config.append_config_value(config_object, section, option, value)
+
+    config.write_configfile(config_path, config_object)
+
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -72,8 +106,6 @@ def build_parser() -> argparse.ArgumentParser:
     return p
 
 
-
-
     
 # Todo:
 # Add ability to show only local or global config values 
@@ -89,7 +121,7 @@ def handle_config_arguments(argv: list[str] | None = None):
         if args.global_config:
             configfiles = [globals.get_global_configfile_path()]
 
-        configs = config.read_configfiles(configfiles)
+        configs = read_configfiles(configfiles)
         output.info(f"Reading configuration files: {[str(p.resolve()) for p in configfiles]}")
         config.show_config_values(configs)
         globals.exit(globals.SUCCESS_CODE)
@@ -102,7 +134,7 @@ def handle_config_arguments(argv: list[str] | None = None):
             config_path = globals.get_local_configfile_path()
             output.info(f"Updating local config file in {config_path}")
         
-        config.update_configfile(config_path, args.settings, args)
+        update_configfile(config_path, args.settings, args)
         
         return 0
 

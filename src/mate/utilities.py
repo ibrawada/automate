@@ -5,7 +5,7 @@ from pathlib import Path
 from mate import output
 from mate import globals
 
-def get_shell_command(configs: dict) -> list[str]:    
+def get_shell_app_cmd(configs: dict) -> list[str]:    
     if sys.platform.startswith("win"):
         shell_app = configs["shell"]["windows"]
         return [shell_app, "-NoProfile", "-Command"]

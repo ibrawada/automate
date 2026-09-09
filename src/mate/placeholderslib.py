@@ -1,8 +1,9 @@
-
-from mate import utilities
-
 import importlib
+
+from typing import Any
+
 from pathlib import Path
+
 
 def extract_placeholders(input: str) -> tuple[list[str], list[str]]:
     config_placeholders = []
@@ -58,6 +59,22 @@ def substitute_function_placeholders(input: str, placeholders: list[str], workin
 
     return substituted_tokens
 
+
+
+def substitute_placeholders(arg_placeholders: dict, configs: dict[str, dict[str, Any]], working_dir: Path) -> list[str]:
+    ret_substituted_arguments = []
+        
+    for argument, placeholders in arg_placeholders.items():
+        function_placeholders = placeholders["function"]
+        config_placeholders = placeholders["config"]
+        substituted_argument = substitute_config_placeholders(argument, config_placeholders, configs)
+        substituted_argument = substitute_function_placeholders(substituted_argument, function_placeholders, working_dir)
+        ret_substituted_arguments.append(substituted_argument)
+
+    return ret_substituted_arguments      
+
+
+
 def extract_argument_placeholders(arguments: list[str]) -> dict:
     argument_placeholders = {}
     for arg in arguments:
@@ -71,25 +88,26 @@ def extract_argument_placeholders(arguments: list[str]) -> dict:
 
 
 
-def substitute_arguments_function_placeholders(args: list[str], arg_placeholders: dict, working_dir: Path) -> list[str]:
-    ret_substituted_arguments = []
+
+# def substitute_arguments_function_placeholders(args: list[str], arg_placeholders: dict, working_dir: Path) -> list[str]:
+#     ret_substituted_arguments = []
         
-    for argument, placeholders in arg_placeholders.items():
-        function_placeholders = placeholders["function"]
-        substituted_argument = substitute_function_placeholders(argument, function_placeholders, working_dir)
-        ret_substituted_arguments.append(substituted_argument)
+#     for argument, placeholders in arg_placeholders.items():
+#         function_placeholders = placeholders["function"]
+#         substituted_argument = substitute_function_placeholders(argument, function_placeholders, working_dir)
+#         ret_substituted_arguments.append(substituted_argument)
 
-    return ret_substituted_arguments    
+#     return ret_substituted_arguments    
 
 
 
-def substitute_argument_placeholders_from_configs(args: list[str], argument_placeholders: dict, configs: dict[str, dict[str, str]]) -> list[str]:
-    ret_substituted_arguments = []
+# def substitute_argument_placeholders_from_configs(args: list[str], argument_placeholders: dict, configs: dict[str, dict[str, Any]]) -> list[str]:
+#     ret_substituted_arguments = []
         
-    for argument, placeholders in argument_placeholders.items():
-        config_placeholders = placeholders["config"]
-        substituted_argument = substitute_config_placeholders(argument, config_placeholders, configs)
-        ret_substituted_arguments.append(substituted_argument)
+#     for argument, placeholders in argument_placeholders.items():
+#         config_placeholders = placeholders["config"]
+#         substituted_argument = substitute_config_placeholders(argument, config_placeholders, configs)
+#         ret_substituted_arguments.append(substituted_argument)
 
-    return ret_substituted_arguments
+#     return ret_substituted_arguments
 

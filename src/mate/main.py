@@ -1,16 +1,12 @@
 #!/usr/bin/env python3
 import argparse
-import shutil
-import subprocess
 import sys
 from pathlib import Path
-import importlib
-from types import ModuleType
+
+
 
 
 from mate import placeholderslib
-from mate import config
-from mate import output
 from mate import globals
 from mate import executors
 from mate import utilities
@@ -46,7 +42,7 @@ def main(cli_arguments=None):
     current_working_dir = cwd_config_arg.cwd
     globals.set_cwd(current_working_dir)
 
-    embedded_commands_names = utilities.collect_embedded_commands(Path(__file__).parent / "ops")
+    embedded_commands_names = utilities.collect_embedded_commands(Path(__file__).parent / globals.EMBEDDED_COMMANDS_FOLDER)
     
     # Initialize config files is required
     config_handling.initialize_configfiles(embedded_commands_names)
@@ -62,7 +58,7 @@ def main(cli_arguments=None):
     # REQ-###: System shall load global config file first followed by local config file
     # REQ-###: System shall override global config value by local config value if present in both files
     # Current behaviour will load the 
-    configs_values = config.read_configfiles([globals.get_global_configfile_path(), globals.get_local_configfile_path()])
+    configs_values = config_handling.read_configfiles([globals.get_global_configfile_path(), globals.get_local_configfile_path()])
 
     command_parser = create_command_parser(embedded_commands_names)
     command_arg, rest_arguments = command_parser.parse_known_args(command_arguments)
@@ -79,31 +75,29 @@ def main(cli_arguments=None):
 
 
     extracted_placeholders = placeholderslib.extract_argument_placeholders(rest_arguments)
-    substitued_arguments = placeholderslib.substitute_argument_placeholders_from_configs(rest_arguments, extracted_placeholders, configs_values)
+    # substitued_arguments = placeholderslib.substitute_argument_placeholders_from_configs(rest_arguments, extracted_placeholders, configs_values)
 
     ## Case 1:
     # Execute an embedded command (aka python script)
     command_name = command_arg.command 
     if command_name in embedded_commands_names:
-        return executors.execute_embedded_command(command_name, substitued_arguments, configs_values.get(command_name, {}), working_directories, extracted_placeholders)
+        return executors.execute_embedded_command(command_name, extracted_placeholders, configs_values, working_directories)
     
     ## Case 2:
     executable_path = configs_values.get("executables", {}).get(command_name)
     # Execute an executable defined inside a config file
     if executable_path:
-        return executors.execute_config_application(executable_path, substitued_arguments, working_directories, extracted_placeholders)
+        return executors.execute_config_application(executable_path, extracted_placeholders, configs_values, working_directories)
     
     # Case 3:
     # Execute a globally callable executable
     # todo: Add a function that will check if the command is a globally callable command
-    globall_callable_command = utilities.is_globally_callable_command(command_name)
-    if globall_callable_command:
+    is_globally_callable_application = utilities.is_globally_callable_command(command_name)
+    if is_globally_callable_application:
         # Treat as an external command to run in each folder
-        return executors.execute_global_application(command_name, substitued_arguments, working_directories, extracted_placeholders)
-
-    else:
-        shell_command = utilities.get_shell_command(configs_values)
-        return executors.execute_shell_command(command_name, substitued_arguments, shell_command, working_directories, extracted_placeholders)
+        return executors.execute_global_application(command_name, extracted_placeholders, configs_values, working_directories)
+    else:        
+        return executors.execute_shell_command(command_name, extracted_placeholders, configs_values, working_directories)
 
 
 
