@@ -5,6 +5,7 @@ import sys
 from pathlib import Path
 
 from mate import output
+from mate import globals
 
 def build_parser(p: argparse.ArgumentParser) -> argparse.ArgumentParser:
     """
@@ -38,7 +39,7 @@ def main(cwd, args, env: dict) -> int:
     
     if not source_path.exists():
         output.error(f"Error: Source path does not exist: {source_path}")
-        return 127
+        return globals.ERROR_CODE
 
     try:
         if source_path.is_dir():
@@ -55,9 +56,9 @@ def main(cwd, args, env: dict) -> int:
             output.info(f"Copied file '{source_path}' to '{dest_path}'")
     except Exception as e:
         output.error(f"during copy operation: {e}")
-        return 127
+        return globals.ERROR_CODE
 
-    return 0
+    return globals.SUCCESS_CODE
 
 
 

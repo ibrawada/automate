@@ -16,7 +16,7 @@ def get_shell_app_cmd(configs: dict) -> list[str]:
     
     else:
         output.error("No shell application defined in global/local config files")
-        globals.exit(globals.ERROR_CODE)
+        globals.exit_mate(globals.ERROR_CODE)
 
 
 

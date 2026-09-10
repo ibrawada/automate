@@ -8,7 +8,7 @@ from typing import Any
 
 from mate import output, utilities
 from mate import placeholderslib
-
+from mate import globals
 
 def run_application(application: str, cmd: list[str], working_dir: str, check: bool = True) -> int:
     full_cmd = [application]
@@ -27,16 +27,17 @@ def run_application(application: str, cmd: list[str], working_dir: str, check: b
 
 
 # This runs the python operations (not git, or notepad)
-def execute_embedded_command(command_name: str, extracted_placeholders: dict, config_values: dict, working_dirs: list[str]) -> int:
+def execute_embedded_command(command_name: str, extracted_placeholders: dict, config_values: dict, working_dirs: list[str]) -> list[(str, int)]:
     
     command_module = importlib.import_module(f".ops.{command_name}", package="mate")
 
     if not hasattr(command_module, "main"):
         output.error(f"No main() entry point for {command_module}")
-        return globals.ERROR_CODE
+        globals.exit_mate(globals.ERROR_CODE)
 
     command_configs = config_values.get(command_name, {})
 
+    ret_process_report = []
     for dir in working_dirs:
         subst_args = placeholderslib.substitute_placeholders(extracted_placeholders, config_values, Path(dir))
         
@@ -47,50 +48,56 @@ def execute_embedded_command(command_name: str, extracted_placeholders: dict, co
         
         output.info(f"{dir}> {command_name} {' '.join(subst_args)}")
         
-        command_module.main(dir, parsed_args, command_configs)
+        execution_status = command_module.main(dir, parsed_args, command_configs)
+        ret_process_report.append((dir, execution_status))
+
+    return ret_process_report
 
 
 
 # This runs the notepad (not python ops and not git)
-def execute_config_application(application: str, placeholders: dict, config_values: dict, working_dirs: list[str]) -> int:
+def execute_config_application(application: str, placeholders: dict, config_values: dict, working_dirs: list[str]) -> list[(str, int)]:
+    ret_process_report = []
     for dir in working_dirs:        
         args = placeholderslib.substitute_placeholders(placeholders, config_values, Path(dir))
-        run_application(application, [*args], working_dir=dir)
+        execution_status = run_application(application, [*args], working_dir=dir)
+        ret_process_report.append((dir, execution_status))
+
+    return ret_process_report
 
 
 
-def execute_shell_command(shell_command: str, extracted_placeholders: dict, config_values: dict[str, Any], working_dirs: list[str]) -> int:
+def execute_shell_command(shell_command: str, extracted_placeholders: dict, config_values: dict[str, Any], working_dirs: list[str]) -> list[(str, int)]:
     shell_app_command = utilities.get_shell_app_cmd(config_values)
     
     if len(shell_app_command) == 0:
         output.error(f"No valid shell command provided. Provided was {shell_command}")
-        globals.exit(globals.ERROR_CODE)
+        globals.exit_mate(globals.ERROR_CODE)
 
     shell_app_command.extend([shell_command])
-    
+
+    ret_process_report = []
+
     for current_dir in working_dirs:
         args = placeholderslib.substitute_placeholders(args, extracted_placeholders, Path(current_dir))
+
         shell_cmd = copy.deepcopy(shell_app_command)
-        
         shell_cmd.extend(args)
 
-        # print(f"shell_cmd: {shell_cmd}")
-
         output.info(f"{str(Path(current_dir).resolve())}> {' '.join(shell_cmd)}")
+        execution_status = subprocess.run(shell_cmd, cwd=current_dir, capture_output=True, text=True)
+        ret_process_report.append((dir, execution_status))
 
-        execution_result = subprocess.run(shell_cmd, cwd=current_dir, capture_output=True, text=True)
-        # TODO: Replace this with Error logging and implement --retry functionality
-        # if execution_result.returncode != 0:
-        #     return execution_result.returncode 
-    return 0
+    return ret_process_report
 
 
 
 def execute_global_application(application: str, placeholders: dict, config_values: dict[str, Any], working_dirs: list[str]) -> int:
+    ret_process_report = []
+
     for dir in working_dirs:
-        # args = utilities.substitute_local_variables(args, folders_vars[folder])
         args = placeholderslib.substitute_placeholders(placeholders, config_values, Path(dir))
-        executation_state = run_application(application, args, working_dir=dir, check=False)
-        # if executation_state != 0:
-        #     return executation_state
-    return 0
+        execution_status = run_application(application, args, working_dir=dir, check=False)
+        ret_process_report.append((dir, execution_status))
+
+    return ret_process_report

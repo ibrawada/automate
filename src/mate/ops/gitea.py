@@ -5,7 +5,10 @@ import requests
 import argparse
 import subprocess
 from pathlib import Path
+
+from mate import globals
 from mate import output
+
 
 COMMAND_NAME = "gitea" 
 HOST = "host"
@@ -134,22 +137,22 @@ def main(cwd, args, env: dict) -> int:
     """
     if HOST not in env or TOKEN not in env:
         output.error(f"'{HOST}' and '{TOKEN}' must be defined in the [{COMMAND_NAME}] section of your config.")
-        return 1
+        return globals.ERROR_CODE
     
     if args.action == "create-pr":
         response = create_pull_request(
            cwd, env[HOST], env[TOKEN], args.title, args.target_branch, args.source_branch
         )
-        return 0
+        return globals.SUCCESS_CODE
     elif args.action == "merge-pr":
         response = merge_pull_request(
             cwd, env[HOST], env[TOKEN], 
             args.delete_branch, args.merge_method 
         )
-        return 0
+        return globals.SUCCESS_CODE
     else:
         output.error(f"Unknown gitea action '{args.action}'")
-        return 1
+        return globals.ERROR_CODE
     
 
 

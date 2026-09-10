@@ -124,7 +124,7 @@ def handle_config_arguments(argv: list[str] | None = None):
         configs = read_configfiles(configfiles)
         output.info(f"Reading configuration files: {[str(p.resolve()) for p in configfiles]}")
         config.show_config_values(configs)
-        globals.exit(globals.SUCCESS_CODE)
+        globals.exit_mate(globals.SUCCESS_CODE)
 
     if args.settings:
         if args.global_config:

@@ -100,25 +100,30 @@ def main(cli_arguments=None):
     # Execute an embedded command (aka python script)
     command_name = command_arg.command 
     if command_name in embedded_commands_names:
-        return executors.execute_embedded_command(command_name, extracted_placeholders, configs_values, working_directories)
-    
+        report = executors.execute_embedded_command(command_name, extracted_placeholders, configs_values, working_directories)
+        output.status_report(report)
+        return globals.SUCCESS_CODE
     ## Case 2:
     executable_path = configs_values.get("executables", {}).get(command_name)
     # Execute an executable defined inside a config file
     if executable_path:
-        return executors.execute_config_application(executable_path, extracted_placeholders, configs_values, working_directories)
-    
+        report = executors.execute_config_application(executable_path, extracted_placeholders, configs_values, working_directories)
+        output.status_report(report)
+        return globals.SUCCESS_CODE    
     # Case 3:
     # Execute a globally callable executable
     # todo: Add a function that will check if the command is a globally callable command
     is_globally_callable_application = utilities.is_globally_callable_command(command_name)
     if is_globally_callable_application:
         # Treat as an external command to run in each folder
-        return executors.execute_global_application(command_name, extracted_placeholders, configs_values, working_directories)
+        report = executors.execute_global_application(command_name, extracted_placeholders, configs_values, working_directories)
+        output.status_report(report)
+        return globals.SUCCESS_CODE    
     # Case 4: Execute a possible shell command.
     else:
-        return executors.execute_shell_command(command_name, extracted_placeholders, configs_values, working_directories)
-
+        report = executors.execute_shell_command(command_name, extracted_placeholders, configs_values, working_directories)
+        output.status_report(report)
+        return globals.SUCCESS_CODE
 
 
 if __name__ == "__main__":

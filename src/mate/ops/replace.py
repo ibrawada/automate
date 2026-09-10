@@ -1,8 +1,11 @@
 
 # ops/replace.py
 import argparse
-from pathlib import Path
 import sys
+from pathlib import Path
+
+from mate import globals
+from mate import output
 
 def build_parser(p: argparse.ArgumentParser) -> argparse.ArgumentParser:
     p.add_argument("-f", "--file", required=True, help="Path to file")
@@ -39,13 +42,15 @@ def main(cwd, args, env: dict) -> int:
                 break
         if text_line_found:
             new_text = old_text.replace(input_text_line, new_line)
-
+        else:
+            output.warning(f"Line to be replaced was not found. Provided: {args.new_line}")
+            return globals.ERROR_CODE
     path.write_text(new_text, encoding="utf-8")    
-    return 0
+    return globals.SUCCESS_CODE
 
 
 
-def get_default_config() -> dict[str, dict[str, str]]:
+def get_default_config() -> dict:
     return {}
     
 

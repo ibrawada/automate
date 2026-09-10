@@ -42,6 +42,6 @@ def get_local_configfile_path() -> Path:
 
 
 
-def exit(exit_code: int = SUCCESS_CODE, str: function = ""):
+def exit_mate(exit_code: int = SUCCESS_CODE, str: function = ""):
     # Todo, maybe logging here for the function in which error occured
     sys.exit(exit_code)
