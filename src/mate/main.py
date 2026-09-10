@@ -5,7 +5,7 @@ from pathlib import Path
 
 
 
-
+from mate import output
 from mate import placeholderslib
 from mate import globals
 from mate import executors
@@ -22,6 +22,12 @@ def create_command_parser(commands):
     )
     
     p.add_argument("command", nargs="?", help=f"One of: {', '.join(sorted(commands))}")
+    p.add_argument("-sf", "--start-from", required=False, help="Set folder name from which the execution shall begin(or continue)")
+    p.add_argument("-o", "--only", required=False, help="Set working directory name. Only this one will be executed") # TODO
+    p.add_argument("-ef", "--exclude", action="append",
+    default=[],
+    help="Folders to exclude. Repeatable and/or comma-separated (e.g. --exclude=dir1,dir2 or --exclude dir1 --exclude dir2)",
+)
     p.add_argument("-h", "--help", action="store_true", help="Show this help")
 
     return p
@@ -71,12 +77,25 @@ def main(cli_arguments=None):
         command_parser.error("a command is required.")
         return globals.ERROR_CODE
 
-    working_directories = utilities.collect_folders(current_working_dir, configs_values["folders"]["exclude"])
+    working_directories = utilities.collect_folders(current_working_dir)
+    working_directories = utilities.remove_folders(working_directories, configs_values["folders"]["exclude"])
+
+    if command_arg.start_from:
+        start_folder = command_arg.start_from
+        working_directories = utilities.remove_folders_until(working_directories, start_folder)
+
+    if command_arg.only:
+        working_directories = [str(Path(command_arg.only))]
+
+    if command_arg.exclude:
+        exclude_dirs = [str(Path(item)) for group in command_arg.exclude for item in group]
+        working_directories = utilities.remove_folders(working_directories, exclude_dirs)
 
 
     extracted_placeholders = placeholderslib.extract_argument_placeholders(rest_arguments)
-    # substitued_arguments = placeholderslib.substitute_argument_placeholders_from_configs(rest_arguments, extracted_placeholders, configs_values)
 
+
+    output.info(f"Execution on following folders:\n {', '.join(working_directories)}\n")
     ## Case 1:
     # Execute an embedded command (aka python script)
     command_name = command_arg.command 
@@ -96,7 +115,8 @@ def main(cli_arguments=None):
     if is_globally_callable_application:
         # Treat as an external command to run in each folder
         return executors.execute_global_application(command_name, extracted_placeholders, configs_values, working_directories)
-    else:        
+    # Case 4: Execute a possible shell command.
+    else:
         return executors.execute_shell_command(command_name, extracted_placeholders, configs_values, working_directories)
 
 

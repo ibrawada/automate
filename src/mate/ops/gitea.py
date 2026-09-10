@@ -11,7 +11,7 @@ COMMAND_NAME = "gitea"
 HOST = "host"
 TOKEN = "token"
 
-def _get_gitea_info(path: Path) -> dict | None:
+def get_git_info(path: Path) -> dict | None:
     """
     Extracts Git info (branch, url, owner, repo) from a local repository.
 
@@ -59,9 +59,9 @@ def _construct_headers(token: str):
 
 
 
-def _create_pull_request(cwd, gitea_url, gitea_PAT, title, target_branch, source_branch = None):
+def create_pull_request(cwd, gitea_url, gitea_PAT, title, target_branch, source_branch = None):
     # Gather git information on the currently processed folder
-    gitea_info = _get_gitea_info(Path(cwd))
+    gitea_info = get_git_info(Path(cwd))
 
     if source_branch is None:
         source_branch = gitea_info["branch"]
@@ -84,9 +84,9 @@ def _create_pull_request(cwd, gitea_url, gitea_PAT, title, target_branch, source
     return response
 
 
-def _merge_pull_request(cwd, gitea_url, gitea_PAT, delete_branch = False,  merge_method = "merge"):
+def merge_pull_request(cwd, gitea_url, gitea_PAT, delete_branch = False,  merge_method = "merge"):
     # Gather git information on the currently processed folder
-    git_info = _get_gitea_info(Path(cwd))
+    git_info = get_git_info(Path(cwd))
     from_branch = git_info["branch"]
 
 
@@ -137,12 +137,12 @@ def main(cwd, args, env: dict) -> int:
         return 1
     
     if args.action == "create-pr":
-        response = _create_pull_request(
+        response = create_pull_request(
            cwd, env[HOST], env[TOKEN], args.title, args.target_branch, args.source_branch
         )
         return 0
     elif args.action == "merge-pr":
-        response = _merge_pull_request(
+        response = merge_pull_request(
             cwd, env[HOST], env[TOKEN], 
             args.delete_branch, args.merge_method 
         )
