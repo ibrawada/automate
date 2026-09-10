@@ -14,6 +14,18 @@ COMMAND_NAME = "gitea"
 HOST = "host"
 TOKEN = "token"
 
+
+def get_default_config() -> dict[str, Any]:
+    return {
+        COMMAND_NAME: 
+        {
+            HOST : "",
+            TOKEN: ""
+        }
+    }
+
+
+
 def get_git_info(path: Path) -> dict | None:
     """
     Extracts Git info (branch, url, owner, repo) from a local repository.
@@ -26,7 +38,7 @@ def get_git_info(path: Path) -> dict | None:
         or None if it's not a git repository or info can't be found.
     """
     if not (path / ".git").is_dir():
-        return None
+        globals.exit_mate(globals.ERROR_CODE, "get_git_info: Path is not a valid git repo")
 
     try:
         # Get current branch
@@ -53,7 +65,8 @@ def get_git_info(path: Path) -> dict | None:
         # This can happen if 'origin' remote doesn't exist or URL is malformed
         return None
 
-def _construct_headers(token: str):
+
+def construct_headers(token: str):
     # construct the header of the request
     headers = {
         'Authorization': f'Bearer {token}',
@@ -62,9 +75,9 @@ def _construct_headers(token: str):
 
 
 
-def create_pull_request(cwd, gitea_url, gitea_PAT, title, target_branch, source_branch = None):
+def create_pull_request(cwd: Path, gitea_url, gitea_PAT, title, target_branch, source_branch = None) -> int:
     # Gather git information on the currently processed folder
-    gitea_info = get_git_info(Path(cwd))
+    gitea_info = get_git_info(cwd)
 
     if source_branch is None:
         source_branch = gitea_info["branch"]
@@ -74,7 +87,7 @@ def create_pull_request(cwd, gitea_url, gitea_PAT, title, target_branch, source_
     url = f'{gitea_url}/api/v1/repos/{gitea_info["owner"]}/{gitea_info["repo"]}/pulls'
 
     # construct the header of the request
-    headers = _construct_headers(gitea_PAT)
+    headers = construct_headers(gitea_PAT)
     # construct the data of the request
     data = {
         'title': title,
@@ -83,21 +96,26 @@ def create_pull_request(cwd, gitea_url, gitea_PAT, title, target_branch, source_
     }
     # call the api by providing the url, header, and data
     response = requests.post(url, headers=headers, json=data)
-    # return the response of the api
-    return response
+
+    if response.status_code != 201:
+        output.error(f"[gitea:merge-pr] No Pull-Request could be created from: {source_branch} to: {target_branch}\nReason: {response.reason}")
+        return globals.ERROR_CODE
+
+    return globals.SUCCESS_CODE
 
 
-def merge_pull_request(cwd, gitea_url, gitea_PAT, delete_branch = False,  merge_method = "merge"):
+def merge_pull_request(cwd: Path, gitea_url, gitea_PAT, from_branch: str | None,  delete_branch = False,  merge_method = "merge") -> int:
     # Gather git information on the currently processed folder
-    git_info = get_git_info(Path(cwd))
-    from_branch = git_info["branch"]
+    git_info = get_git_info(cwd)
+    if from_branch is None:
+        from_branch = git_info["branch"]
 
 
     # Get all pull requests for the repo
     # https://docs.gitea.com/api/1.24/#tag/repository/operation/repoListPullRequests
     prs_url = f'{gitea_url}/api/v1/repos/{git_info["owner"]}/{git_info["repo"]}/pulls'
     data = {'state': "open" }
-    headers = _construct_headers(gitea_PAT)
+    headers = construct_headers(gitea_PAT)
     prs_response = requests.get(prs_url, headers=headers, json=data)
     prs = prs_response.json()
     
@@ -114,7 +132,7 @@ def merge_pull_request(cwd, gitea_url, gitea_PAT, delete_branch = False,  merge_
         # construct the url of the 
         url = f'{gitea_url}/api/v1/repos/{git_info["owner"]}/{git_info["repo"]}/pulls/{pr_index}/merge'
         # construct the header of the request
-        headers = _construct_headers(gitea_PAT)
+        headers = construct_headers(gitea_PAT)
         # construct the data of the request
         data = {
             'Do': merge_method,
@@ -124,14 +142,18 @@ def merge_pull_request(cwd, gitea_url, gitea_PAT, delete_branch = False,  merge_
         # https://docs.gitea.com/api/1.24/#tag/repository/operation/repoPullRequestIsMerged
         response = requests.post(url, headers=headers, json=data)
         # return the response of the api
-        return response
+        # print(f"responce:\n {response}")
+        if response.status_code >= 300:
+            output.error(f"[gitea:merge-pr] Pull-Request from: {from_branch} with index:{pr_index} cannot be merged. Reason: {response.reason}")
+            return globals.ERROR_CODE
+        return globals.SUCCESS_CODE
     else:
-        output.warning("[gitea:merge-pr] No pull request found")
-        return None
+        output.warning(f"[gitea:merge-pr] No pull request found for provided from-branch: {from_branch}")
+        return globals.ERROR_CODE
 
 
 
-def main(cwd, args, env: dict) -> int:
+def main(cwd: Path, args, env: dict) -> int:
     """
     Executes the gitea operation based on parsed arguments.
     """
@@ -140,31 +162,20 @@ def main(cwd, args, env: dict) -> int:
         return globals.ERROR_CODE
     
     if args.action == "create-pr":
-        response = create_pull_request(
+        pr_status = create_pull_request(
            cwd, env[HOST], env[TOKEN], args.title, args.target_branch, args.source_branch
         )
-        return globals.SUCCESS_CODE
+        return pr_status
     elif args.action == "merge-pr":
-        response = merge_pull_request(
-            cwd, env[HOST], env[TOKEN], 
+        merge_status = merge_pull_request(
+            cwd, env[HOST], env[TOKEN], args.from_branch, 
             args.delete_branch, args.merge_method 
         )
-        return globals.SUCCESS_CODE
+        return merge_status
     else:
         output.error(f"Unknown gitea action '{args.action}'")
         return globals.ERROR_CODE
     
-
-
-def get_default_config() -> dict[str, dict[str, str]]:
-    return {
-        COMMAND_NAME: 
-        {
-            HOST : "",
-            TOKEN: ""
-        }
-    }
-
 
 
 
@@ -184,7 +195,8 @@ def build_parser(p: argparse.ArgumentParser) -> argparse.ArgumentParser:
     merge_parser = subparsers.add_parser("merge-pr", help="Merge a pull request")
     merge_parser.add_argument("--merge-method", default="merge",
                               choices=['merge', 'rebase', 'rebase-merge', 'squash', 'manually-merged'],
-                              help="Merge method")
+                              help="Merge method. Default=merge")
+    merge_parser.add_argument("--from-branch", required=False, help="Source branch for the PR")
     merge_parser.add_argument("--delete-branch", action="store_true", help="Delete source branch after merge")
 
     return p

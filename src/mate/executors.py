@@ -48,7 +48,7 @@ def execute_embedded_command(command_name: str, extracted_placeholders: dict, co
         
         output.info(f"{dir}> {command_name} {' '.join(subst_args)}")
         
-        execution_status = command_module.main(dir, parsed_args, command_configs)
+        execution_status = command_module.main(Path(globals.get_cwd() / dir), parsed_args, command_configs)
         ret_process_report.append((dir, execution_status))
 
     return ret_process_report

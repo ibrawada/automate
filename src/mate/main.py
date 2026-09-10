@@ -88,14 +88,19 @@ def main(cli_arguments=None):
         working_directories = [str(Path(command_arg.only))]
 
     if command_arg.exclude:
-        exclude_dirs = [str(Path(item)) for group in command_arg.exclude for item in group]
+        exclude_dirs = [str(Path(item.strip()))
+                            for entry in command_arg.exclude
+                            for item in entry.split(",")
+                            if item.strip()]
         working_directories = utilities.remove_folders(working_directories, exclude_dirs)
+
 
 
     extracted_placeholders = placeholderslib.extract_argument_placeholders(rest_arguments)
 
 
     output.info(f"Execution on following folders:\n {', '.join(working_directories)}\n")
+    
     ## Case 1:
     # Execute an embedded command (aka python script)
     command_name = command_arg.command 

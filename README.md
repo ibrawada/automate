@@ -29,7 +29,7 @@ Fallback strategies. The list goes from top to bottom, when one candidate is fou
 - call to globally available executables
 - call to shell commands
 ## Feature
-- Be able to execute terminal custom commands eg. mkdir or something
+- (Done/Partial)Be able to execute terminal custom commands eg. mkdir or something
 
 REQ
 - placeholder functions should be able to execute shell commands. uc: mate copy -i file.txt -d %shell[$Get-ItemName]%.txt
@@ -37,9 +37,16 @@ REQ
 
 Future work
 Use Story
-- Be able to execute an executable which not global and not part of the config (eg. mate c:\folder\someapp.exe somefile.txt) The current behaviour will try to execute a powershell command at the moment.
+- Be able to execute an executable which not global and not part of the config The current behaviour will try to execute a powershell command at the moment.
+-- UC: mate c:\folder\someapp.exe somefile.txt
 - I want to see a summary at the end of each execution if everything went well or if a folder had an error
+-- Done(PARTIAL):
+--- (Not yet implemented) REQ If during execution an exception or an error was thrown -> then this error shall be caught and execution continued for remaining folders
+---- Of course this shall be context dependent: if for example a wrong application name provided eg. gti instead of git -> then execution shall break for everything because it doesnt make sense to continue
 - I want to perform a retry on a command if it hasnt been sucessfully executed on some of the folder. The retry should execute only those folders that didn't succeed the first time
+-- Done
+--- Added a --start-from CLI argument to specify the folder from which the execution shall start. Skipping all the (sorted) folders in the list before start-folder
+
 - I want to specify the type of the executer (shell, global, config or module) if for some reason the command doesn't sent to the proper executer by the app or another executor with the same name exists which has priority over the desired
 - I want to be able to modify the executor selection order. The default is currently hard coded and cannot be changed 
 
@@ -48,3 +55,8 @@ Use Story
 -- REQ: Mate shall not override any modified options from embedded commands. 
 
 
+- I want to be able to perform a set of operations on folders that originally fulfill specific condition
+-- UC: perform any git operations on folders that initially had modifications. eg. Create a new branch, git add, git commit etc.. only for those repos.
+
+- For a function placeholder i want to be able to read text from a file and use it as input.
+-- gitea create-pr --description %read_file[<some_file>.txt]%
