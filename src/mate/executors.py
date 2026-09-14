@@ -12,11 +12,11 @@ from mate.placeholderslib import Node
 from mate import globals
 
 
-def resolve_cli_args(arguments_and_placeholders: dict[str, list[Node]], placeholder_functions: dict[str, MateModule], working_dir: Path) -> list[str]:
+def resolve_cli_args(arguments_and_placeholders: dict[str, list[Node]], placeholder_functions: dict[str, MateModule], execution_dir: Path) -> list[str]:
     subst_args = []
     for arg, pcs in arguments_and_placeholders.items():
         if  pcs:
-            placeholderslib.resolve_function_nodes(pcs, placeholder_functions, working_dir)
+            placeholderslib.resolve_function_nodes(pcs, placeholder_functions, execution_dir)
             arg_value = placeholderslib.resolve_argument(arg, pcs)
             subst_args.append(arg_value)
         else:
@@ -25,14 +25,14 @@ def resolve_cli_args(arguments_and_placeholders: dict[str, list[Node]], placehol
 
 
 
-def run_application(application: str, cmd: list[str], working_dir: Path, check: bool = True) -> int:
+def run_application(application: str, cmd: list[str], execution_dir: Path, check: bool = True) -> int:
     full_cmd = [application]
     full_cmd.extend(cmd)
 
-    output.info(f"{str(working_dir.resolve())}> {' '.join(full_cmd)}")
+    output.info(f"{str(execution_dir.resolve())}> {' '.join(full_cmd)}")
 
     try:
-        completed = subprocess.run(full_cmd, cwd=working_dir, check=check)
+        completed = subprocess.run(full_cmd, cwd=execution_dir, check=check)
         return completed.returncode
     except FileNotFoundError as e:
         output.error(f"command not found: {full_cmd[0]}\n{e}")
@@ -42,7 +42,7 @@ def run_application(application: str, cmd: list[str], working_dir: Path, check: 
 
 
 # This runs the python operations (not git, or notepad)
-def execute_embedded_command(command_module: MateModule, arguments_and_placeholders: dict[str, list[Node]], placeholder_functions: dict[str, MateModule], config_values: dict[str, Any], working_dirs: list[Path]) -> list[(str, int)]:
+def execute_embedded_command(command_module: MateModule, arguments_and_placeholders: dict[str, list[Node]], placeholder_functions: dict[str, MateModule], config_values: dict[str, Any], execution_dirs: list[Path]) -> list[(str, int)]:
     module = command_module.module
     if not hasattr(module, "main"):
         output.error(f"No main() entry point for {command_module}")
@@ -51,7 +51,7 @@ def execute_embedded_command(command_module: MateModule, arguments_and_placehold
     command_configs = config_values.get(command_module.path, {})
 
     ret_process_report = []
-    for dir in working_dirs:
+    for dir in execution_dirs:
         subst_args = resolve_cli_args(arguments_and_placeholders, placeholder_functions, dir)
         
         parser = module.build_parser(
@@ -69,24 +69,24 @@ def execute_embedded_command(command_module: MateModule, arguments_and_placehold
 
 
 # This runs the notepad (not python ops and not git)
-def execute_config_application(application: str, arguments_and_placeholders: dict[str, list[Node]], placeholder_functions: dict[str, MateModule], config_values: dict[str, Any], working_dirs: list[Path]) -> list[(str, int)]:
+def execute_config_application(application: str, arguments_and_placeholders: dict[str, list[Node]], placeholder_functions: dict[str, MateModule], config_values: dict[str, Any], execution_dirs: list[Path]) -> list[(str, int)]:
     ret_process_report = []
-    for dir in working_dirs:        
+    for dir in execution_dirs:        
         subst_args = resolve_cli_args(arguments_and_placeholders, placeholder_functions, dir)
-        execution_status = run_application(application, [*subst_args], working_dir=dir)
+        execution_status = run_application(application, [*subst_args], execution_dir=dir)
         ret_process_report.append((str(dir), execution_status))
 
     return ret_process_report
 
 
 
-def execute_shell_command(shell_command: str, arguments_and_placeholders: dict[str, list[Node]],placeholder_functions: dict[str, MateModule], config_values: dict[str, Any], working_dirs: list[Path]) -> list[tuple[str, int]]:
+def execute_shell_command(shell_command: str, arguments_and_placeholders: dict[str, list[Node]],placeholder_functions: dict[str, MateModule], config_values: dict[str, Any], execution_dirs: list[Path]) -> list[tuple[str, int]]:
     shell_app_command = utilities.get_shell_app_cmd(config_values)
     shell_app = shell_app_command[0]
 
     ret_process_report = []
 
-    for current_dir in working_dirs:
+    for current_dir in execution_dirs:
         subst_args = resolve_cli_args(arguments_and_placeholders, placeholder_functions, current_dir)
 
         # The shell takes the whole command as one string; extra argv items would not be part of it (e.g. bash -c)
@@ -105,12 +105,12 @@ def execute_shell_command(shell_command: str, arguments_and_placeholders: dict[s
 
 
 
-def execute_global_application(application: str, arguments_and_placeholders: dict[str, list[Node]],placeholder_functions: dict[str, MateModule], config_values: dict[str, Any], working_dirs: list[Path]) -> int:
+def execute_global_application(application: str, arguments_and_placeholders: dict[str, list[Node]],placeholder_functions: dict[str, MateModule], config_values: dict[str, Any], execution_dirs: list[Path]) -> int:
     ret_process_report = []
 
-    for dir in working_dirs:
+    for dir in execution_dirs:
         subst_args = resolve_cli_args(arguments_and_placeholders, placeholder_functions, dir)
-        execution_status = run_application(application, subst_args, working_dir=dir, check=False)
+        execution_status = run_application(application, subst_args, execution_dir=dir, check=False)
         ret_process_report.append((str(dir), execution_status))
 
     return ret_process_report

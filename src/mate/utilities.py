@@ -103,18 +103,20 @@ def load_modules(modules: dict[str, MateModule]):
 
 
 def collect_folders(main_directory: Path) -> list[str]:
-    # iterate over cwd and collect only the direct folder in level 1
+    # iterate over the workspace directory and collect only the direct folder in level 1
     ret_folders = []
     for child_item in main_directory.iterdir():
         if child_item.is_dir():
             ret_folders.append(str(child_item.name))
+
+    ret_folders.sort(key=str.casefold)
     return ret_folders
 
 
 
-def remove_folders(working_dirs: list[str], exclude_folders: list[str]) -> list[str]:
+def remove_folders(execution_dirs: list[str], exclude_folders: list[str]) -> list[str]:
     ret_dirs = []
-    for dir in working_dirs:
+    for dir in execution_dirs:
         if dir not in exclude_folders:
             ret_dirs.append(dir)
     return ret_dirs

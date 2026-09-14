@@ -210,12 +210,12 @@ def node_children_values_to_list(node: Node) -> list[str]:
 
 
 
-def resolve_function_nodes(tree: list[Node], all_functions: dict[str, MateModule], working_dir: Path):
+def resolve_function_nodes(tree: list[Node], all_functions: dict[str, MateModule], execution_dir: Path):
     for node in sorted(tree, key=lambda n: n.depth, reverse=True):
         if node.type != NodeType.FUNCTION:
             continue
         node_args = node_children_values_to_list(node)
-        value = all_functions[node.content].module.run(working_dir, node_args)
+        value = all_functions[node.content].module.run(execution_dir, node_args)
         node.value = value
 
 

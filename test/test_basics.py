@@ -36,12 +36,12 @@ section, option, value = split_setting(setting)
 print(f"section:{section} option:{option} value:{value}")
 
 # def cli(args = None):
-#     # --- Initial Setup: Parse only --cwd to set the context ---
-#     # This is only required if the cwd is not the call directory
-#     # cwd_parser = argparse.ArgumentParser(add_help=False)
-#     # cwd_parser.add_argument("--cwd", type=Path, default=".")
-#     # cwd_args, _ = cwd_parser.parse_known_args(argv)
-#     # set_cwd(cwd_args.cwd)
+#     # --- Initial Setup: Parse only --wsd to set the context ---
+#     # This is only required if the workspace directory is not the call directory
+#     # wsd_parser = argparse.ArgumentParser(add_help=False)
+#     # wsd_parser.add_argument("--wsd", type=Path, default=".")
+#     # wsd_args, _ = wsd_parser.parse_known_args(argv)
+#     # set_workspace_dir(wsd_args.wsd)
 #     print(sys.argv)
 
 #     for arg in sys.argv:

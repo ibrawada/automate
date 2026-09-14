@@ -63,9 +63,9 @@ def main(cwd, args, env: dict) -> int:
 
 
 if __name__ == "__main__":
-    cwd_parser = argparse.ArgumentParser(add_help=False)
-    cwd_parser.add_argument("--cwd", type=Path, default=".")
-    cwd_args, rest_args = cwd_parser.parse_known_args(sys.argv[1:])
+    wsd_parser = argparse.ArgumentParser(add_help=False)
+    wsd_parser.add_argument("--wsd", type=Path, default=".")
+    wsd_args, rest_args = wsd_parser.parse_known_args(sys.argv[1:])
     
 
     parser = build_parser(
@@ -75,4 +75,4 @@ if __name__ == "__main__":
     parsed_args = parser.parse_args(args=rest_args)
 
 
-    main(cwd_args.cwd, parsed_args, {})
+    main(wsd_args.wsd, parsed_args, {})

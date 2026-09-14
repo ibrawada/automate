@@ -11,20 +11,20 @@ SUCCESS_CODE = 0
 APP_NAME = "mate"
 GLOBAL_CONFIG_FILE_NAME = "mate-global.toml"
 LOCAL_CONFIG_FILE_NAME = "mate-local.toml"
-CWD = Path(".")
+WORKSPACE_DIR = Path(".")
 
 EMBEDDED_COMMANDS_FOLDER = "commands"
 # CONDITIONS_FOLDER = "conditions"
 FUNCTIONS_FOLDER = "functions"
 
 
-def set_cwd(path: Path):
-    global CWD
-    CWD = path
+def set_workspace_dir(path: Path):
+    global WORKSPACE_DIR
+    WORKSPACE_DIR = path
 
 
-def get_cwd() -> Path:
-    return CWD
+def get_workspace_dir() -> Path:
+    return WORKSPACE_DIR
 
 
 def get_home_dir() -> Path:
@@ -41,7 +41,7 @@ def get_global_configfile_path() -> Path:
 
 
 def get_local_configfile_path() -> Path:
-    return CWD / Path(f".{APP_NAME}") / LOCAL_CONFIG_FILE_NAME
+    return WORKSPACE_DIR / Path(f".{APP_NAME}") / LOCAL_CONFIG_FILE_NAME
 
 
 
