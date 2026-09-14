@@ -1,1 +1,4 @@
-tomli-w
+requests>=2.34.2
+colorama>=0.4.6
+tomli-w>=1.2.0
+gitpython>=3.1.62
