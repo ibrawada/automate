@@ -5,6 +5,37 @@ from typing import Any
 from pathlib import Path
 
 
+
+# a placeholder is defined inside a resolution slot which is delimited by 2 %% chars
+
+
+# Following possible placeholders combinations
+# - %<placeholder>%
+# - %<placeholder>abc%
+# - abc%<placeholder>%
+# - abc%<placeholder>%abc
+  
+
+# The placeholder itself can be either
+# - config placeholder: %vars:name%
+#   - The value of the vars:name is extracted from local or global config value
+#   - The value is extracted only once
+# - function placeholder: %folder_name[]%
+#   - The value is extracted for each processed directory
+
+# (!) Not possible is having 2 placeholders in sequence inside one resolution slot
+
+# # Future work
+# function placeholders can have nested arguments
+# %function[vars:option]%
+# %function[vars:option1, vars:option2]%
+# %function["string"]$
+# %function["string", vars:option3]%
+# The nesting can go even deeper
+# %func1[func2[]]%
+# %func1[func2["arg", fun3[vars:option, "arg2"]]] and so on
+# - execution sequence shall be from bottom to top, left to right
+
 def extract_placeholders(input: str) -> tuple[list[str], list[str]]:
     config_placeholders = []
     function_placeholders = []
