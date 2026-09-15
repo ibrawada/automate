@@ -51,6 +51,14 @@ def remove_folders_until(folders: list[str], start_folder: str) -> list[str]:
     return ret_folders
 
 
+def split_csv_args(args: list[list[str]]) -> list[str]:
+    return [str(Path(dir.strip()))
+            for group in args
+            for dir in group.split(",")
+            if dir.strip()]
+
+
+
 def is_globally_callable_command(command_name: str) -> bool:
     return shutil.which(command_name) != None
 

@@ -60,7 +60,7 @@ def create_configfile_if_none(configfile_path: Path, config_content: dict) -> bo
 
 
 
-def create_section_option_if_none(config_content: dict, section: str, option: str, value: str) -> bool:
+def create_section_and_option_if_none(config_content: dict, section: str, option: str, value: str) -> bool:
     # If no section -> create section
     if section not in config_content:
         config_content[section] = {}
@@ -75,7 +75,7 @@ def create_section_option_if_none(config_content: dict, section: str, option: st
 
 def append_config_value(config_content: dict, section: str, option: str, value: str) -> dict:    
 
-    was_created = create_section_option_if_none(config_content, section, option, value)
+    was_created = create_section_and_option_if_none(config_content, section, option, value)
     if was_created:
         return config_content
     
@@ -95,7 +95,7 @@ def append_config_value(config_content: dict, section: str, option: str, value: 
 
 def override_config_value(config_object: dict, section: str, option: str, value: str) -> dict:
 
-    option_created = create_section_option_if_none(config_object, section, option, value)
+    option_created = create_section_and_option_if_none(config_object, section, option, value)
     if option_created:
         return config_object
     
