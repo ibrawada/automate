@@ -30,3 +30,15 @@ def status_report(report: list[str, int]):
         message += ", "
 
     print(Fore.BLUE + "[REPORT] " + Fore.WHITE + message)
+
+
+def suggest_retry(report: list[str, int]):
+    message = "--only="
+    retry_folders = []
+    for dir, status in report:
+        if status != globals.SUCCESS_CODE:
+            retry_folders.append(dir)
+
+    if len(retry_folders) != 0:
+        message += ','.join(retry_folders)
+        info(f"To retry with failed folders use: {message}")

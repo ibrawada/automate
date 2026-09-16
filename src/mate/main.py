@@ -138,16 +138,15 @@ def main(cli_arguments=None):
         working_directories = utilities.remove_folders(working_directories, exclude_dirs)
 
 
-
-
     output.info(f"Execution on following folders:\n {', '.join(working_directories)}\n")
-    
+
     ## Case 1:
     # Execute an embedded command (aka python script)
     command_name = command_arg.command 
     if command_name in embedded_commands_names:
         report = executors.execute_embedded_command(command_name, arguments_and_placeholders, configs_values, working_directories)
         output.status_report(report)
+        output.suggest_retry(report)
         return globals.SUCCESS_CODE
     ## Case 2:
     executable_path = configs_values.get("executables", {}).get(command_name)
@@ -155,6 +154,7 @@ def main(cli_arguments=None):
     if executable_path:
         report = executors.execute_config_application(executable_path, arguments_and_placeholders, configs_values, working_directories)
         output.status_report(report)
+        output.suggest_retry(report)
         return globals.SUCCESS_CODE    
     # Case 3:
     # Execute a globally callable executable
@@ -164,11 +164,13 @@ def main(cli_arguments=None):
         # Treat as an external command to run in each folder
         report = executors.execute_global_application(command_name, arguments_and_placeholders, configs_values, working_directories)
         output.status_report(report)
+        output.suggest_retry(report)
         return globals.SUCCESS_CODE    
     # Case 4: Execute a possible shell command.
     else:
         report = executors.execute_shell_command(command_name, arguments_and_placeholders, configs_values, working_directories)
         output.status_report(report)
+        output.suggest_retry(report)
         return globals.SUCCESS_CODE
 
 
