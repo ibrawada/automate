@@ -4,7 +4,25 @@ from typing import Any
 
 from pathlib import Path
 
+from dataclasses import dataclass, field
+from enum import Enum, auto
 
+
+class NodeType(Enum):
+    FUNCTION = auto()
+    STRING = auto()
+    NUMBER = auto()
+    CONFIG = auto()
+
+
+@dataclass
+class Node:
+    id: int
+    parent: int | None
+    children: list[int] = field(default_factory=list)
+    level: int = 0
+    position: int = 0
+    type: NodeType = NodeType.CONFIG
 
 # a placeholder is defined inside a resolution slot which is delimited by 2 %% chars
 
