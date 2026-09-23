@@ -7,22 +7,26 @@ from pathlib import Path
 from dataclasses import dataclass, field
 from enum import Enum, auto
 
+from mate import output
+from mate import globals
+
 
 class NodeType(Enum):
     FUNCTION = auto()
     STRING = auto()
-    NUMBER = auto()
+    # NUMBER = auto()
     CONFIG = auto()
 
 
 @dataclass
 class Node:
     id: int
-    parent: int | None
-    children: list[int] = field(default_factory=list)
+    value = ""
+    parent: Node | None
+    children: list[Node] = field(default_factory=list)
     level: int = 0
     position: int = 0
-    type: NodeType = NodeType.CONFIG
+    type: NodeType = NodeType.STRING
 
 # a placeholder is defined inside a resolution slot which is delimited by 2 %% chars
 
@@ -53,6 +57,87 @@ class Node:
 # %func1[func2[]]%
 # %func1[func2["arg", fun3[vars:option, "arg2"]]] and so on
 # - execution sequence shall be from bottom to top, left to right
+
+def find_pc_delimiters(input: str) -> tuple[int, int] | None:
+    # Find placeholder delimiters
+    pc_start = None
+    pc_end = None 
+    for i in range(0, len(input)):
+            current_char = input[i]
+            if current_char == '%':
+                if pc_start == None:
+                    pc_start = i
+                else:
+                    pc_end = i
+
+    # No delimiters found -> no placeholders present
+    if pc_start == None:
+        return None, None
+    
+    # Error if wrong number of delimiters was found
+    if pc_start != None and pc_end == None:
+        output.error(f"Found only one placeholder delimiter in {input} at {pc_start}")
+
+    return pc_start+1, pc_end
+
+
+
+# This will create at least one Node tree
+def create_pc_tree(input: str,index: int = 0, parent: Node | None = None, tree: list | None = None) -> tuple[list, int]:
+    # if input == "":
+    #     return tree
+    
+    # Todo: Remove this unnecessary member later
+    current_position = 0
+
+    if parent == None:
+        current_id = 0
+        current_level = 0
+        current_node = Node(0,parent=None)
+    else:
+        current_id = parent.id+1
+        current_level = parent.level + 1
+        current_node = Node(current_id, parent, [], current_level, current_position)
+        parent.children.append(current_node)
+
+    # if tree == None:
+    #     tree = {}
+    tree.append(current_node)
+    # This can only be done recursively.
+    while index < len(input):
+        current_char = input[index]
+        # print(f"index:{index}, current_char:{current_char}")
+
+
+        if current_char == '[':# -> start new level and
+            current_node.type = NodeType.FUNCTION
+            tree, index = create_pc_tree(input,index+1,current_node, tree)
+            current_id = tree[len(tree)-1].id
+
+        elif current_char == ']': # -> End of the level
+            # Check first if the created Node is empty -> then delete
+            if len(current_node.value) == 0:
+                tree.pop() # Remove last added node when its empty
+            return tree, index
+
+        elif current_char == ',': # -> create new node on the same level but incremented position
+            if parent == None or parent.type != NodeType.FUNCTION:
+                output.error(f"Cannot have placeholders with , without a parent of type function")
+                globals.exit_mate(globals.ERROR_CODE)
+            current_id += 1
+            current_position += 1
+            current_node = Node(current_id, parent, [], current_level, current_position)
+            tree.append(current_node)
+            parent.children.append(current_node)
+
+        else: # Fill the value of the Node
+            current_node.value += current_char
+            if current_char == ':':
+                current_node.type = NodeType.CONFIG
+
+        index += 1
+    # Todo: Add counters to [ and ] for error detection
+    return tree, index
 
 def extract_placeholders(input: str) -> tuple[list[str], list[str]]:
     config_placeholders = []
