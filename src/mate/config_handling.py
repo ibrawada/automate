@@ -6,9 +6,9 @@ from typing import Any
 from mate import config
 from mate import output
 from mate import globals
+from mate.utilities import MateModule
 
-
-def initialize_configfiles(command_names: list[str]):    
+def initialize_configfiles(commands: dict[str, MateModule]):    
     config_path = globals.get_global_configfile_path()
     global_config_created = config.create_configfile_if_none(config_path, config.DEFAULT_GLOBAL_CONFIG_CONTENT)
     
@@ -21,9 +21,9 @@ def initialize_configfiles(command_names: list[str]):
     if global_config_created:
         # For each command write config file default values if nothing yet present
         modules_config = {}
-        for command in command_names:
-            command_module = importlib.import_module(f".ops.{command}", package="mate")
-            config_values = command_module.get_default_config()
+        for command_name, command in commands.items():
+            # command_module = importlib.import_module(f".ops.{command}", package="mate")
+            config_values = command.module.get_default_config()
             modules_config.update(config_values)
         config.write_configfile(modules_config, config.get_global_configfile_path(), "a")
 

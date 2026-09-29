@@ -7,21 +7,26 @@ import importlib
 
 from mate import output
 from mate import placeholderslib
+from mate.placeholderslib import Node
 from mate import globals
 from mate import executors
 from mate import utilities
+from mate.utilities import MateModule
 from mate import config_handling
 
 
 
-def create_command_parser(commands):
+def create_command_parser(commands: dict[str, MateModule]):
     p = argparse.ArgumentParser(
         prog=f"python {Path(sys.argv[0]).name}",
         description="command runner",
         add_help=False,
     )
-    
-    p.add_argument("command", nargs="?", help=f"One of: {', '.join(sorted(commands))}")
+    command_names = []
+    for name,_ in commands.items():
+        command_names.append(name)
+
+    p.add_argument("command", nargs="?", help=f"One of: {', '.join(sorted(command_names))}")
     p.add_argument("-sf", "--start-from", required=False, help="Set folder name from which the execution shall begin(or continue)")
     p.add_argument("-o", "--only", action="append", required=False, help="Set working directory name. Only this one will be executed") # TODO, make it accept a csv list. Can also be populated with placeholders
     p.add_argument("-ef", "--exclude", action="append",
@@ -35,7 +40,7 @@ def create_command_parser(commands):
 
 
 # Either prints a list of folder if no config name provided, else would also create/override an entry inside folders:<name>
-def glob_folders(all_folders: list[str], arguments: list[str]) -> list[str]:
+def glob_folders(all_folders: list[str], modules: dict[str, dict[str, MateModule]], configs: dict, arguments: dict[str, list[Node]]) -> list[str]:
     # Need to first parse the arguments to determine what is required.
     # Check if the argument for config name provided.
     p = argparse.ArgumentParser(prog=f"",description="", add_help=False)    
@@ -44,18 +49,32 @@ def glob_folders(all_folders: list[str], arguments: list[str]) -> list[str]:
     parsed_args, rest_args = p.parse_known_args(arguments)
 
     # Parse placeholder condition. and resolve the value immediately
-    placeholders = placeholderslib.extract_argument_placeholders([parsed_args.condition])
-
+    # placeholders = placeholderslib.extract_argument_placeholders([parsed_args.condition])
+    # placeholders = placeholderslib.
     
-    condition_root, condition_name = str(parsed_args.condition).removeprefix('%').removesuffix('%').split('/')
-    condition_name = condition_name.removesuffix('[]')
-    condition_module = importlib.import_module(f".conditions.{condition_root}.{condition_name}", package="mate")
+    # condition_root, condition_name = str(parsed_args.condition).removeprefix('%').removesuffix('%').split('/')
+    # condition_name = condition_name.removesuffix('[]')
+    # condition_module = importlib.import_module(f".conditions.{condition_root}.{condition_name}", package="mate")
+
+    # First resolve all config pcs
+    for arg, pcs in arguments.items():
+        if pcs == None:
+            continue
+        # Todo: This still missing a full resolution -> the values are only stored in the Nodes but not written into arg
+        placeholderslib.resolve_config_pcs(pcs, configs)
+    # second resolve all functions pcs when iterating over all directories
+
+
 
     ret_valid_dirs = []
     for dir in all_folders:
-        condition_status = condition_module.run(Path(globals.get_cwd() / dir), rest_args)
-        if condition_status:
-            ret_valid_dirs.append(dir)
+        for arg, pcs in arguments.items():
+            placeholderslib.resolve_function_pcs(pcs, modules["functions"], dir)
+
+        # Check if the placeholder arg == True 
+        # condition_status = condition_module.run(Path(globals.get_cwd() / dir), rest_args)
+        # if condition_status:
+        #     ret_valid_dirs.append(dir)
 
     return ret_valid_dirs
 
@@ -76,12 +95,24 @@ def main(cli_arguments=None):
     current_working_dir = cwd_config_arg.cwd
     globals.set_cwd(current_working_dir)
 
-    embedded_commands_names = utilities.collect_embedded_commands(Path(__file__).parent / globals.EMBEDDED_COMMANDS_FOLDER)
+    embedded_commands_modules = utilities.collect_modules(Path(__file__).parent / globals.EMBEDDED_COMMANDS_FOLDER)
+    conditions_modules = utilities.collect_modules(Path(__file__).parent / globals.CONDITIONS_FOLDER)
+    functions_modules = utilities.collect_modules(Path(__file__).parent / globals.FUNCTIONS_FOLDER)
+    
+    utilities.load_modules(embedded_commands_modules)
+    utilities.load_modules(conditions_modules)
+    utilities.load_modules(functions_modules)
+
+    all_modules = {
+        "embedded" : embedded_commands_modules,
+        "functions" : functions_modules,
+        "conditions" : conditions_modules
+    }
     
     # Initialize config files is required
-    config_handling.initialize_configfiles(embedded_commands_names)
+    config_handling.initialize_configfiles(embedded_commands_modules)
 
-    command_parser = create_command_parser(embedded_commands_names)
+    command_parser = create_command_parser(embedded_commands_modules)
     command_arg, rest_arguments = command_parser.parse_known_args(command_arguments)
 
     if command_arg.command == "config":
@@ -101,8 +132,8 @@ def main(cli_arguments=None):
         return globals.ERROR_CODE
 
     
+    # arguments_and_placeholders = placeholderslib.extract_argument_placeholders(rest_arguments)
     arguments_and_placeholders = placeholderslib.extract_argument_placeholders(rest_arguments)
-
 
 
     # Collect all folders in the working directory
@@ -112,7 +143,7 @@ def main(cli_arguments=None):
 
 
     if command_arg.command == "glob":
-        folders = glob_folders(working_directories, command_arguments[1:])
+        folders = glob_folders(working_directories, all_modules, configs_values, arguments_and_placeholders)
         output.info(f"Use following argument: --only={','.join(folders)}")
         globals.exit_mate()
        
@@ -143,7 +174,7 @@ def main(cli_arguments=None):
     ## Case 1:
     # Execute an embedded command (aka python script)
     command_name = command_arg.command 
-    if command_name in embedded_commands_names:
+    if command_name in embedded_commands_modules:
         report = executors.execute_embedded_command(command_name, arguments_and_placeholders, configs_values, working_directories)
         output.status_report(report)
         output.suggest_retry(report)

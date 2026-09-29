@@ -1,9 +1,24 @@
+from dataclasses import dataclass
+from enum import Enum, auto
 import sys
 import shutil
 from pathlib import Path
+from importlib import import_module
+from types import ModuleType
 
 from mate import output
 from mate import globals
+
+
+
+    
+@dataclass(kw_only=True)
+class MateModule:
+    # name: str = "" # redundat because it is already the key for the dict
+    path: str = "" # encoded as folder.[root].module_name
+    module: ModuleType | None = None 
+
+
 
 def get_shell_app_cmd(configs: dict) -> list[str]:    
     if sys.platform.startswith("win"):
@@ -20,11 +35,28 @@ def get_shell_app_cmd(configs: dict) -> list[str]:
 
 
 
-def collect_embedded_commands(commands_dir: Path) -> list[str]:
-    names = sorted(
-        p.stem for p in commands_dir.glob("*.py") if p.stem != "__init__"
+def collect_modules(modules_dir: Path) -> dict[str, MateModule]:
+    # Todo: Modify this to be able to work recursively.
+    # Also the collected name should contain root dir as well. eg. git/has_branch.py
+    modules_names = sorted(
+        p for p in modules_dir.rglob("*.py") if p.stem != "__init__"
     )
-    return names
+
+    
+    ret_modules = {}
+    for module in modules_names:
+        print(str(module))
+        module_path = ".".join(module.with_suffix("").parts)
+        print(module_path)
+        ret_modules[module.stem] = MateModule(path=module_path)
+    
+    return ret_modules
+
+
+
+def load_modules(modules: dict[str, MateModule]):
+    for _,module in modules.items():
+        module.module = import_module(f"{module.path}", package="mate")
 
 
 
@@ -37,6 +69,7 @@ def collect_folders(main_directory: Path) -> list[str]:
     return ret_folders
 
 
+
 def remove_folders(working_dirs: list[str], exclude_folders: list[str]) -> list[str]:
     ret_dirs = []
     for dir in working_dirs:
@@ -45,10 +78,12 @@ def remove_folders(working_dirs: list[str], exclude_folders: list[str]) -> list[
     return ret_dirs
 
 
+
 def remove_folders_until(folders: list[str], start_folder: str) -> list[str]:
     index_start_folder = folders.index(str(Path(start_folder)))
     ret_folders = folders[index_start_folder:]
     return ret_folders
+
 
 
 def split_csv_args(args: list[list[str]]) -> list[str]:
@@ -61,6 +96,7 @@ def split_csv_args(args: list[list[str]]) -> list[str]:
 
 def is_globally_callable_command(command_name: str) -> bool:
     return shutil.which(command_name) != None
+
 
 
 def split_csv(value: str) -> list[str]:

@@ -14,6 +14,9 @@ LOCAL_CONFIG_FILE_NAME = "mate-local.toml"
 CWD = Path(".")
 
 EMBEDDED_COMMANDS_FOLDER = "ops"
+CONDITIONS_FOLDER = "conditions"
+FUNCTIONS_FOLDER = "functions"
+
 
 def set_cwd(path: Path):
     global CWD
