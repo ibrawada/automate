@@ -10,13 +10,16 @@ from mate import output
 from mate import globals
 
 
+class MateModuleType(Enum):
+    VALUE = auto()
+    BOOLEAN = auto()
 
     
 @dataclass(kw_only=True)
 class MateModule:
-    # name: str = "" # redundat because it is already the key for the dict
     path: str = "" # encoded as folder.[root].module_name
     module: ModuleType | None = None 
+    type: MateModuleType | None = None
 
 
 
@@ -35,20 +38,20 @@ def get_shell_app_cmd(configs: dict) -> list[str]:
 
 
 
-def collect_modules(modules_dir: Path) -> dict[str, MateModule]:
+def collect_modules(modules_root_dir: Path, modules_home_dir: Path | None = None) -> dict[str, MateModule]:
     # Todo: Modify this to be able to work recursively.
     # Also the collected name should contain root dir as well. eg. git/has_branch.py
+    modules_path = modules_root_dir / modules_home_dir
     modules_names = sorted(
-        p for p in modules_dir.rglob("*.py") if p.stem != "__init__"
+        p for p in modules_path.rglob("*.py") if p.stem != "__init__"
     )
 
     
     ret_modules = {}
     for module in modules_names:
-        print(str(module))
-        module_path = ".".join(module.with_suffix("").parts)
-        print(module_path)
-        ret_modules[module.stem] = MateModule(path=module_path)
+        module_path = ".".join(module.relative_to(modules_root_dir).with_suffix("").parts)
+        module_name = ".".join(module.relative_to(modules_root_dir / modules_home_dir).with_suffix("").parts)
+        ret_modules[module_name] = MateModule(path=module_path)
     
     return ret_modules
 
@@ -56,7 +59,7 @@ def collect_modules(modules_dir: Path) -> dict[str, MateModule]:
 
 def load_modules(modules: dict[str, MateModule]):
     for _,module in modules.items():
-        module.module = import_module(f"{module.path}", package="mate")
+        module.module = import_module(f".{module.path}", package="mate")
 
 
 

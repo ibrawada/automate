@@ -2,7 +2,7 @@ from pathlib import Path
 import subprocess
 
 
-def run(cwd: Path) -> str:
+def run(cwd: Path, args) -> str:
     try:
         # Get current branch
         branch = subprocess.check_output(

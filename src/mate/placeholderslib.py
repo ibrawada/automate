@@ -16,7 +16,6 @@ from mate.utilities import MateModule
 class NodeType(Enum):
     FUNCTION = auto()
     STRING = auto()
-    # NUMBER = auto()
     CONFIG = auto()
 
 
@@ -25,10 +24,10 @@ class Node:
     id: int # Todo: Might irrelevant / Could be relevant in order to traverse the tree in ascending order
     parent: Node | None = None
     content: str = "" # Contains the pc string 
-    value: str = "" # Contains the value of the pc after evaluation
+    value: Any | None = None # Contains the value of the pc after evaluation
     children: list[Node] = field(default_factory=list)
     resolved: bool = False
-    level: int = 0
+    depth: int = 0
     position: int = 0 # Todo: Might irrelevant
     type: NodeType = NodeType.STRING
     index: int | None = None
@@ -103,18 +102,18 @@ def find_pc_delimiters(input: str) -> tuple[int, int] | None:
 
 def create_pc_tree(input: str) -> list[Node]:    
     tree,_ = _create_pc_tree(input)
+    # Finalize Tree initialization
     for index in range(0,len(tree)):
         tree[index].index = index
+        if tree[index].type == NodeType.STRING:
+            tree[index].resolved = True
+            tree[index].value = tree[index].content
     return tree
 
 
 
 # This will create at least one Node tree
 def _create_pc_tree(input: str,index: int = 0, parent: Node | None = None, tree: list | None = None) -> tuple[list, int]:
-    # if input == "":
-    #     return tree
-    
-    # Todo: Remove this unnecessary member later
     current_position = 0
 
     if parent == None:
@@ -123,18 +122,16 @@ def _create_pc_tree(input: str,index: int = 0, parent: Node | None = None, tree:
         current_node = Node(id=0,parent=None)
     else:
         current_id = parent.id+1
-        current_level = parent.level + 1
-        current_node = Node(id=current_id, parent=parent, level=current_level, position=current_position)
+        current_level = parent.depth + 1
+        current_node = Node(id=current_id, parent=parent, depth=current_level, position=current_position)
         parent.children.append(current_node)
 
     if tree == None:
         tree = []
     tree.append(current_node)
-    # This can only be done recursively.
+
     while index < len(input):
         current_char = input[index]
-        # print(f"index:{index}, current_char:{current_char}")
-
 
         if current_char == '[':# -> start new level and
             current_node.type = NodeType.FUNCTION
@@ -142,7 +139,7 @@ def _create_pc_tree(input: str,index: int = 0, parent: Node | None = None, tree:
             current_id = tree[len(tree)-1].id
 
         elif current_char == ']': # -> End of the level
-            # Check first if the created Node is empty -> then delete
+            # Check: is the created Node is empty -> then delete this empty node
             if len(current_node.content) == 0:
                 tree.pop() # Remove last added node when its empty
                 parent.children.pop()
@@ -154,7 +151,7 @@ def _create_pc_tree(input: str,index: int = 0, parent: Node | None = None, tree:
                 globals.exit_mate(globals.ERROR_CODE)
             current_id += 1
             current_position += 1
-            current_node = Node(id=current_id, parent=parent, level=current_level, position=current_position)
+            current_node = Node(id=current_id, parent=parent, depth=current_level, position=current_position)
             tree.append(current_node)
             parent.children.append(current_node)
 
@@ -184,7 +181,7 @@ def count_function_braces(input: str) -> tuple[int, int]:
 
 
 
-def resolve_config_pc_content(node: Node, configs: dict):
+def resolve_config_node(node: Node, configs: dict):
     # Find the pc content in configs
     section, option = node.content.split(':', 1)
     value = configs.get(section, {}).get(option, {})
@@ -197,161 +194,40 @@ def resolve_config_pc_content(node: Node, configs: dict):
     node.value = value
 
 
-def resolve_config_pcs(tree: list[Node], configs: dict):
+def resolve_config_nodes(tree: list[Node], configs: dict):
     for node in tree:
         if node.type == NodeType.CONFIG and node.resolved == False:
-            resolve_config_pc_content(node, configs)
+            resolve_config_node(node, configs)
 
 
 
-def traverse_down(node: Node, indices: list[int]):
-    if node.children != []:
-        for child in node.children:
-            traverse_down(child, indices)
-        indices.append(node.index)
+
+def node_children_values_to_list(node: Node) -> list[str]:
+    ret_values = []
+    for child in node.children:
+        ret_values.append(child.value)
+    return ret_values
+
+
+
+def resolve_function_nodes(tree: list[Node], all_functions: dict[str, MateModule], working_dir: Path):
+    for node in sorted(tree, key=lambda n: n.depth, reverse=True):
+        if node.type != NodeType.FUNCTION:
+            continue
+        node_args = node_children_values_to_list(node)
+        value = all_functions[node.content].module.run(working_dir, node_args)
+        node.value = value
+
+
+def resolve_argument(argument:str, placeholders: list[Node]) -> str:
+    root_node = placeholders[0]
+
+    if isinstance(root_node.value, list):
+        end_value = ''.join(root_node.value)
     else:
-        indices.append(node.index)
-
-
-
-def traverse_tree_LRR(tree: list[Node]) -> list[int]:
-    indices = []
-    traverse_down(tree[0], indices)
-    return indices
-
-
-
-# Could be embedded and also user created
-def resolve_function_pcs(tree: list[Node], functions: dict[str, MateModule], working_dir: str):
-    for node in tree:
-        if node.type == NodeType.FUNCTION and functions.get(node.content) != None:
-            node.value = functions[node.content].module.run(working_dir)
-            node.resolved = True
-
-
-
-# def resolve_conditionals_pc_content(node: Node, dir: str):
-    # if node.content.count('/'):
-    #     condition_root, condition_name = node.content.split('/')
-    #     condition_module = importlib.import_module(f".conditions.{condition_root}.{condition_name}", package="mate")
-    # else:
-    #     condition_module = importlib.import_module(f".conditions.{node.content}", package="mate")
-
-    # Todo: The condition node has to resolve all of its children before returning status.
-    # Or require that a condition cannot have nested pcs and these cannot be functions, only strings
-    # -> The argument above will exclude following conditions : logical_and[condition_1[],condition_2] 
-    # which might be relevant for users
-    # But also conditions of the type: logical_equal[get_branch_name[],"feature-abc"] would be nice to have
-    # rest_args = []
-    # condition_status = condition_module.run(Path(dir), rest_args)
-
-# Could be embedded and also user created
-# def resolve_conditionals_pcs(tree: list[Node], conditions: dict[str, MateModule], working_dir: str):
+        end_value = root_node.value
     
-#     for node in tree:
-#         if node.type ==NodeType.FUNCTION and conditions.count(node.content) != 0:
-#             resolve_conditionals_pc_content(node, working_dir)
+    start, end = find_pc_delimiters(argument)
+    subst_arg = argument.replace(f"%{argument[start:end]}%", end_value)
 
-
-def pc_fully_resolved(tree: list[Node]) -> bool:
-    pass
-
-# Todo: Deprecate everything below 
-# --------------
-# def extract_placeholders(input: str) -> tuple[list[str], list[str]]:
-#     config_placeholders = []
-#     function_placeholders = []
-    
-#     start = -1
-#     placeholder = ""
-#     for i in range(0, len(input)):
-#         if input[i] == '%':
-#             # Start of placeholder found
-#             if start == -1:
-#                 start = i
-#             # End of placeholder found
-#             else:
-#                 placeholder = input[start+1:i]
-#                 start = -1
-        
-#                 # Analyse if the placeholder is a config value or a function
-#                 if '[' in placeholder and ']' in placeholder:
-#                     function_placeholders.append(placeholder)
-#                 else:
-#                     config_placeholders.append(placeholder)
-
-#         # Detect error case -> if start has a value other than default and the end of arg parameter was reached 
-#         # this means that there was no end % 
-#     if start != -1:
-#         print(f"[ERROR] argument {input} has no ending % delimiter")
-#         # TODO throw an exception and break execution
-
-#     return (config_placeholders, function_placeholders)
-
-
-
-# def substitute_config_placeholders(input: str, placeholders: list[str], config_values: dict) -> list[str]:
-#     substituted_tokens = input
-
-#     for placehoder in placeholders:
-#         section, entry = placehoder.split(':')
-#         substituted_tokens = substituted_tokens.replace(f"%{placehoder}%", config_values[section][entry])
-
-#     return substituted_tokens
-
-
-
-# def substitute_function_placeholders(input: str, placeholders: list[str], working_dir: Path) -> list[str]:
-#     # Check whether this creates a copy or NOT
-#     substituted_tokens = input
-
-#     for placeholder in placeholders:
-#         function_module = importlib.import_module(f".functions.{placeholder.removesuffix('[]')}", package="mate")
-#         placeholder_value = function_module.run(working_dir)
-#         substituted_tokens = substituted_tokens.replace(f"%{placeholder}%", placeholder_value)
-
-#     return substituted_tokens
-
-
-
-# def substitute_placeholders(arg_placeholders: dict, configs: dict[str, dict[str, Any]], working_dir: Path) -> list[str]:
-#     ret_substituted_arguments = []
-        
-#     for argument, placeholders in arg_placeholders.items():
-#         function_placeholders = placeholders["function"]
-#         config_placeholders = placeholders["config"]
-#         substituted_argument = substitute_config_placeholders(argument, config_placeholders, configs)
-#         substituted_argument = substitute_function_placeholders(substituted_argument, function_placeholders, working_dir)
-#         ret_substituted_arguments.append(substituted_argument)
-
-#     return ret_substituted_arguments      
-
-
-
-
-
-
-
-
-# # def substitute_arguments_function_placeholders(args: list[str], arg_placeholders: dict, working_dir: Path) -> list[str]:
-# #     ret_substituted_arguments = []
-        
-# #     for argument, placeholders in arg_placeholders.items():
-# #         function_placeholders = placeholders["function"]
-# #         substituted_argument = substitute_function_placeholders(argument, function_placeholders, working_dir)
-# #         ret_substituted_arguments.append(substituted_argument)
-
-# #     return ret_substituted_arguments    
-
-
-
-# # def substitute_argument_placeholders_from_configs(args: list[str], argument_placeholders: dict, configs: dict[str, dict[str, Any]]) -> list[str]:
-# #     ret_substituted_arguments = []
-        
-# #     for argument, placeholders in argument_placeholders.items():
-# #         config_placeholders = placeholders["config"]
-# #         substituted_argument = substitute_config_placeholders(argument, config_placeholders, configs)
-# #         ret_substituted_arguments.append(substituted_argument)
-
-# #     return ret_substituted_arguments
-
+    return subst_arg

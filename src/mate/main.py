@@ -11,7 +11,7 @@ from mate.placeholderslib import Node
 from mate import globals
 from mate import executors
 from mate import utilities
-from mate.utilities import MateModule
+from mate.utilities import MateModule, MateModuleType
 from mate import config_handling
 
 
@@ -40,41 +40,26 @@ def create_command_parser(commands: dict[str, MateModule]):
 
 
 # Either prints a list of folder if no config name provided, else would also create/override an entry inside folders:<name>
-def glob_folders(all_folders: list[str], modules: dict[str, dict[str, MateModule]], configs: dict, arguments: dict[str, list[Node]]) -> list[str]:
+def glob_folders(all_folders: list[str], modules: dict[str, MateModule], configs: dict, arguments: dict[str, list[Node]]) -> list[str]:
     # Need to first parse the arguments to determine what is required.
     # Check if the argument for config name provided.
-    p = argparse.ArgumentParser(prog=f"",description="", add_help=False)    
-    p.add_argument("condition", nargs="?", help=f"")
-    p.add_argument("--name", required=False, help="Set name for the config folder:<name> entry")
-    parsed_args, rest_args = p.parse_known_args(arguments)
-
-    # Parse placeholder condition. and resolve the value immediately
-    # placeholders = placeholderslib.extract_argument_placeholders([parsed_args.condition])
-    # placeholders = placeholderslib.
-    
-    # condition_root, condition_name = str(parsed_args.condition).removeprefix('%').removesuffix('%').split('/')
-    # condition_name = condition_name.removesuffix('[]')
-    # condition_module = importlib.import_module(f".conditions.{condition_root}.{condition_name}", package="mate")
+    # p = argparse.ArgumentParser(prog=f"",description="", add_help=False)    
+    # p.add_argument("condition", nargs="?", help=f"")
+    # p.add_argument("--name", required=False, help="Set name for the config folder:<name> entry")
+    # parsed_args, rest_args = p.parse_known_args(arguments)
 
     # First resolve all config pcs
-    for arg, pcs in arguments.items():
-        if pcs == None:
-            continue
-        # Todo: This still missing a full resolution -> the values are only stored in the Nodes but not written into arg
-        placeholderslib.resolve_config_pcs(pcs, configs)
-    # second resolve all functions pcs when iterating over all directories
-
-
+    # for arg, pcs in arguments.items():
+    #     if pcs == None:
+    #         continue
+    #     placeholderslib.resolve_config_nodes(pcs, configs)
 
     ret_valid_dirs = []
     for dir in all_folders:
         for arg, pcs in arguments.items():
-            placeholderslib.resolve_function_pcs(pcs, modules["functions"], dir)
-
-        # Check if the placeholder arg == True 
-        # condition_status = condition_module.run(Path(globals.get_cwd() / dir), rest_args)
-        # if condition_status:
-        #     ret_valid_dirs.append(dir)
+            placeholderslib.resolve_function_nodes(pcs, modules, Path(globals.get_cwd()) / dir)
+            if pcs[0].value == True:
+                ret_valid_dirs.append(dir)
 
     return ret_valid_dirs
 
@@ -95,24 +80,26 @@ def main(cli_arguments=None):
     current_working_dir = cwd_config_arg.cwd
     globals.set_cwd(current_working_dir)
 
-    embedded_commands_modules = utilities.collect_modules(Path(__file__).parent / globals.EMBEDDED_COMMANDS_FOLDER)
-    conditions_modules = utilities.collect_modules(Path(__file__).parent / globals.CONDITIONS_FOLDER)
-    functions_modules = utilities.collect_modules(Path(__file__).parent / globals.FUNCTIONS_FOLDER)
+    embedded_command_modules = utilities.collect_modules(Path(__file__).parent , globals.EMBEDDED_COMMANDS_FOLDER)
+    boolean_modules = utilities.collect_modules(Path(__file__).parent , globals.CONDITIONS_FOLDER)
+    value_modules = utilities.collect_modules(Path(__file__).parent , globals.FUNCTIONS_FOLDER)
     
-    utilities.load_modules(embedded_commands_modules)
-    utilities.load_modules(conditions_modules)
-    utilities.load_modules(functions_modules)
+    utilities.load_modules(embedded_command_modules)
+    utilities.load_modules(boolean_modules)
+    utilities.load_modules(value_modules)
 
-    all_modules = {
-        "embedded" : embedded_commands_modules,
-        "functions" : functions_modules,
-        "conditions" : conditions_modules
-    }
+    for _,module in boolean_modules.items():
+        module.type = MateModuleType.BOOLEAN
+    for _,module in value_modules.items():
+        module.type = MateModuleType.VALUE        
+
+    placeholder_functions = value_modules | boolean_modules
+
     
     # Initialize config files is required
-    config_handling.initialize_configfiles(embedded_commands_modules)
+    config_handling.initialize_configfiles(embedded_command_modules)
 
-    command_parser = create_command_parser(embedded_commands_modules)
+    command_parser = create_command_parser(embedded_command_modules)
     command_arg, rest_arguments = command_parser.parse_known_args(command_arguments)
 
     if command_arg.command == "config":
@@ -132,18 +119,23 @@ def main(cli_arguments=None):
         return globals.ERROR_CODE
 
     
-    # arguments_and_placeholders = placeholderslib.extract_argument_placeholders(rest_arguments)
+    # Extract placeholders for each independent argument
     arguments_and_placeholders = placeholderslib.extract_argument_placeholders(rest_arguments)
-
+    
+    # Resolve static placeholders (those that can be resolved from config values)
+    for _, pcs in arguments_and_placeholders.items():
+        if pcs == None:
+            continue
+        placeholderslib.resolve_config_nodes(pcs, configs_values)
 
     # Collect all folders in the working directory
-    working_directories = utilities.collect_folders(current_working_dir)
+    working_directories_names = utilities.collect_folders(current_working_dir)
     # exclude those defined in the configs
-    working_directories = utilities.remove_folders(working_directories, configs_values["folders"]["exclude"])
+    working_directories_names = utilities.remove_folders(working_directories_names, configs_values["folders"]["exclude"])
 
 
     if command_arg.command == "glob":
-        folders = glob_folders(working_directories, all_modules, configs_values, arguments_and_placeholders)
+        folders = glob_folders(working_directories_names, placeholder_functions, configs_values, arguments_and_placeholders)
         output.info(f"Use following argument: --only={','.join(folders)}")
         globals.exit_mate()
        
@@ -156,26 +148,32 @@ def main(cli_arguments=None):
     # mate command --only=dir1,dir2 --start-from dir2 -> will skip dir 1 (useful for continue aborted/failed operation)
     # mate command --only=dir1,..,dirN --exclude=dir1,dir4,dir6 -> will remove dir1,dir4 and dir6 from execution list (useful for retry operation on folders that didn't succeed previously)
     if command_arg.only:
-        working_directories = utilities.split_csv_args(command_arg.only) # Todo: extract the function below into a free function. (Maybe this should be usable from within the arg parser)
+        working_directories_names = utilities.split_csv_args(command_arg.only) # Todo: extract the function below into a free function. (Maybe this should be usable from within the arg parser)
 
 
     if command_arg.start_from:
         start_folder = command_arg.start_from
-        working_directories = utilities.remove_folders_until(working_directories, start_folder)
+        working_directories_names = utilities.remove_folders_until(working_directories_names, start_folder)
 
 
     if command_arg.exclude:
         exclude_dirs = utilities.split_csv_args(command_arg.exclude)
-        working_directories = utilities.remove_folders(working_directories, exclude_dirs)
+        working_directories_names = utilities.remove_folders(working_directories_names, exclude_dirs)
 
 
-    output.info(f"Execution on following folders:\n {', '.join(working_directories)}\n")
+    output.info(f"Execution on following folders:\n {', '.join(working_directories_names)}\n")
+
+    working_directories_paths = []
+    for dir in working_directories_names:
+        working_directories_paths.append(Path(globals.get_cwd()) / dir)
+
 
     ## Case 1:
     # Execute an embedded command (aka python script)
     command_name = command_arg.command 
-    if command_name in embedded_commands_modules:
-        report = executors.execute_embedded_command(command_name, arguments_and_placeholders, configs_values, working_directories)
+    # if command_name in embedded_command_modules:
+    if embedded_command_modules.get(command_name, {}):
+        report = executors.execute_embedded_command(embedded_command_modules[command_name], arguments_and_placeholders, placeholder_functions, configs_values,  working_directories_paths)
         output.status_report(report)
         output.suggest_retry(report)
         return globals.SUCCESS_CODE
@@ -183,7 +181,7 @@ def main(cli_arguments=None):
     executable_path = configs_values.get("executables", {}).get(command_name)
     # Execute an executable defined inside a config file
     if executable_path:
-        report = executors.execute_config_application(executable_path, arguments_and_placeholders, configs_values, working_directories)
+        report = executors.execute_config_application(executable_path, arguments_and_placeholders,placeholder_functions, configs_values, working_directories_paths)
         output.status_report(report)
         output.suggest_retry(report)
         return globals.SUCCESS_CODE    
@@ -193,13 +191,13 @@ def main(cli_arguments=None):
     is_globally_callable_application = utilities.is_globally_callable_command(command_name)
     if is_globally_callable_application:
         # Treat as an external command to run in each folder
-        report = executors.execute_global_application(command_name, arguments_and_placeholders, configs_values, working_directories)
+        report = executors.execute_global_application(command_name, arguments_and_placeholders,placeholder_functions, configs_values, working_directories_paths)
         output.status_report(report)
         output.suggest_retry(report)
         return globals.SUCCESS_CODE    
     # Case 4: Execute a possible shell command.
     else:
-        report = executors.execute_shell_command(command_name, arguments_and_placeholders, configs_values, working_directories)
+        report = executors.execute_shell_command(command_name, arguments_and_placeholders, placeholder_functions, configs_values, working_directories_paths)
         output.status_report(report)
         output.suggest_retry(report)
         return globals.SUCCESS_CODE
