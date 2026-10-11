@@ -93,14 +93,14 @@ def execute_shell_command(shell_command: str, arguments_and_placeholders: dict[s
     ret_process_report = []
 
     for current_dir in working_dirs:
-        subst_args = resolve_cli_args(arguments_and_placeholders, placeholder_functions, dir)
+        subst_args = resolve_cli_args(arguments_and_placeholders, placeholder_functions, current_dir)
 
         shell_cmd = copy.deepcopy(shell_app_command)
         shell_cmd.extend(subst_args)
 
         output.info(f"{str(Path(current_dir).resolve())}> {' '.join(shell_cmd)}")
         execution_status = subprocess.run(shell_cmd, cwd=current_dir, capture_output=True, text=True)
-        ret_process_report.append((str(dir), execution_status))
+        ret_process_report.append((str(current_dir), execution_status))
 
     return ret_process_report
 
