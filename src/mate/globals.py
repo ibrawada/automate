@@ -2,7 +2,7 @@ import sys
 import os
 from pathlib import Path
 
-from mate import output
+# from mate import output
 
 ERROR_CODE = 127
 SUCCESS_CODE = 0
@@ -13,8 +13,8 @@ GLOBAL_CONFIG_FILE_NAME = "mate-global.toml"
 LOCAL_CONFIG_FILE_NAME = "mate-local.toml"
 CWD = Path(".")
 
-EMBEDDED_COMMANDS_FOLDER = "ops"
-CONDITIONS_FOLDER = "conditions"
+EMBEDDED_COMMANDS_FOLDER = "commands"
+# CONDITIONS_FOLDER = "conditions"
 FUNCTIONS_FOLDER = "functions"
 
 

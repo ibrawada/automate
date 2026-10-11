@@ -7,9 +7,13 @@ name = "mate"
 version = "0.1.0"
 description = "Run repetitive operations across multiple project folders."
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 
-dependencies = ["requests", "colorama"]
+dependencies = [
+    "requests",
+    "colorama",
+    "tomli-w",
+]
 
 [project.scripts]
 mate = "mate.main:main"

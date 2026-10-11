@@ -2,7 +2,6 @@
 import argparse
 import sys
 from pathlib import Path
-import importlib
 
 
 from mate import output
@@ -11,7 +10,7 @@ from mate.placeholderslib import Node
 from mate import globals
 from mate import executors
 from mate import utilities
-from mate.utilities import MateModule, MateModuleType
+from mate.utilities import MateModule
 from mate import config_handling
 
 
@@ -41,18 +40,6 @@ def create_command_parser(commands: dict[str, MateModule]):
 
 # Either prints a list of folder if no config name provided, else would also create/override an entry inside folders:<name>
 def glob_folders(all_folders: list[str], modules: dict[str, MateModule], configs: dict, arguments: dict[str, list[Node]]) -> list[str]:
-    # Need to first parse the arguments to determine what is required.
-    # Check if the argument for config name provided.
-    # p = argparse.ArgumentParser(prog=f"",description="", add_help=False)    
-    # p.add_argument("condition", nargs="?", help=f"")
-    # p.add_argument("--name", required=False, help="Set name for the config folder:<name> entry")
-    # parsed_args, rest_args = p.parse_known_args(arguments)
-
-    # First resolve all config pcs
-    # for arg, pcs in arguments.items():
-    #     if pcs == None:
-    #         continue
-    #     placeholderslib.resolve_config_nodes(pcs, configs)
 
     ret_valid_dirs = []
     for dir in all_folders:
@@ -80,26 +67,16 @@ def main(cli_arguments=None):
     current_working_dir = cwd_config_arg.cwd
     globals.set_cwd(current_working_dir)
 
-    embedded_command_modules = utilities.collect_modules(Path(__file__).parent , globals.EMBEDDED_COMMANDS_FOLDER)
-    boolean_modules = utilities.collect_modules(Path(__file__).parent , globals.CONDITIONS_FOLDER)
-    value_modules = utilities.collect_modules(Path(__file__).parent , globals.FUNCTIONS_FOLDER)
+    embedded_commands = utilities.collect_modules(Path(__file__).parent , globals.EMBEDDED_COMMANDS_FOLDER)
+    placeholder_functions = utilities.collect_modules(Path(__file__).parent , globals.FUNCTIONS_FOLDER)
     
-    utilities.load_modules(embedded_command_modules)
-    utilities.load_modules(boolean_modules)
-    utilities.load_modules(value_modules)
+    utilities.load_modules(embedded_commands)
+    utilities.load_modules(placeholder_functions)
 
-    for _,module in boolean_modules.items():
-        module.type = MateModuleType.BOOLEAN
-    for _,module in value_modules.items():
-        module.type = MateModuleType.VALUE        
-
-    placeholder_functions = value_modules | boolean_modules
-
-    
     # Initialize config files is required
-    config_handling.initialize_configfiles(embedded_command_modules)
+    config_handling.initialize_configfiles(embedded_commands)
 
-    command_parser = create_command_parser(embedded_command_modules)
+    command_parser = create_command_parser(embedded_commands)
     command_arg, rest_arguments = command_parser.parse_known_args(command_arguments)
 
     if command_arg.command == "config":
@@ -172,8 +149,8 @@ def main(cli_arguments=None):
     # Execute an embedded command (aka python script)
     command_name = command_arg.command 
     # if command_name in embedded_command_modules:
-    if embedded_command_modules.get(command_name, {}):
-        report = executors.execute_embedded_command(embedded_command_modules[command_name], arguments_and_placeholders, placeholder_functions, configs_values,  working_directories_paths)
+    if embedded_commands.get(command_name, {}):
+        report = executors.execute_embedded_command(embedded_commands[command_name], arguments_and_placeholders, placeholder_functions, configs_values,  working_directories_paths)
         output.status_report(report)
         output.suggest_retry(report)
         return globals.SUCCESS_CODE

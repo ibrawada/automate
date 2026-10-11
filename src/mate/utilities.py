@@ -10,16 +10,16 @@ from mate import output
 from mate import globals
 
 
-class MateModuleType(Enum):
-    VALUE = auto()
-    BOOLEAN = auto()
+# class MateModuleType(Enum):
+#     VALUE = auto()
+#     BOOLEAN = auto()
 
     
 @dataclass(kw_only=True)
 class MateModule:
     path: str = "" # encoded as folder.[root].module_name
     module: ModuleType | None = None 
-    type: MateModuleType | None = None
+    # type: MateModuleType | None = None
 
 
 
@@ -45,7 +45,6 @@ def collect_modules(modules_root_dir: Path, modules_home_dir: Path | None = None
     modules_names = sorted(
         p for p in modules_path.rglob("*.py") if p.stem != "__init__"
     )
-
     
     ret_modules = {}
     for module in modules_names:
