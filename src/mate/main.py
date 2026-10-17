@@ -165,7 +165,7 @@ def main(cli_arguments=None):
     # Case 3:
     # Execute a globally callable executable
     # todo: Add a function that will check if the command is a globally callable command
-    is_globally_callable_application = utilities.is_globally_callable_command(command_name)
+    is_globally_callable_application = utilities.is_callable_executable(command_name)
     if is_globally_callable_application:
         # Treat as an external command to run in each folder
         report = executors.execute_global_application(command_name, arguments_and_placeholders,placeholder_functions, configs_values, working_directories_paths)

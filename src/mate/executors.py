@@ -1,5 +1,4 @@
 import argparse
-import copy
 import importlib
 import subprocess
 import shutil
@@ -81,26 +80,26 @@ def execute_config_application(application: str, arguments_and_placeholders: dic
 
 
 
-def execute_shell_command(shell_command: str, arguments_and_placeholders: dict[str, list[Node]],placeholder_functions: dict[str, MateModule], config_values: dict[str, Any], working_dirs: list[Path]) -> list[(str, int)]:
+def execute_shell_command(shell_command: str, arguments_and_placeholders: dict[str, list[Node]],placeholder_functions: dict[str, MateModule], config_values: dict[str, Any], working_dirs: list[Path]) -> list[tuple[str, int]]:
     shell_app_command = utilities.get_shell_app_cmd(config_values)
-    
-    if len(shell_app_command) == 0:
-        output.error(f"No valid shell command provided. Provided was {shell_command}")
-        globals.exit_mate(globals.ERROR_CODE)
-
-    shell_app_command.extend([shell_command])
+    shell_app = shell_app_command[0]
 
     ret_process_report = []
 
     for current_dir in working_dirs:
         subst_args = resolve_cli_args(arguments_and_placeholders, placeholder_functions, current_dir)
 
-        shell_cmd = copy.deepcopy(shell_app_command)
-        shell_cmd.extend(subst_args)
+        # The shell takes the whole command as one string; extra argv items would not be part of it (e.g. bash -c)
+        command_line = utilities.build_shell_command_line(shell_app, shell_command, subst_args)
+        shell_cmd = [*shell_app_command, command_line]
 
-        output.info(f"{str(Path(current_dir).resolve())}> {' '.join(shell_cmd)}")
-        execution_status = subprocess.run(shell_cmd, cwd=current_dir, capture_output=True, text=True)
-        ret_process_report.append((str(current_dir), execution_status))
+        output.info(f"{str(Path(current_dir).resolve())}> {command_line}")
+        try:
+            run_status = subprocess.run(shell_cmd, cwd=current_dir, text=True)
+            ret_process_report.append((str(current_dir), run_status.returncode))
+        except OSError as e:
+            output.error(f"Failed to run shell {shell_app}: {e}")
+            ret_process_report.append((str(current_dir), globals.ERROR_CODE))
 
     return ret_process_report
 

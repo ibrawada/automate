@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from enum import Enum, auto
 import sys
+import shlex
 import shutil
 from pathlib import Path
 from importlib import import_module
@@ -9,38 +10,77 @@ from types import ModuleType
 from mate import output
 from mate import globals
 
-
-# class MateModuleType(Enum):
-#     VALUE = auto()
-#     BOOLEAN = auto()
-
     
 @dataclass(kw_only=True)
 class MateModule:
     path: str = "" # encoded as folder.[root].module_name
     module: ModuleType | None = None 
-    # type: MateModuleType | None = None
 
 
 
-def get_shell_app_cmd(configs: dict) -> list[str]:    
+POWERSHELL_APPS = ("powershell", "pwsh")
+CMD_APPS = ("cmd",)
+
+
+def get_shell_platform_keys() -> list[str]:
+    # Config keys to look up under [shell], in priority order
     if sys.platform.startswith("win"):
-        shell_app = configs["shell"]["windows"]
-        return [shell_app, "-NoProfile", "-Command"]
-    
-    elif sys.platform.startswith("linux"):
-        shell_app = configs["shell"]["linux"]
-        return [shell_app, "-c"]
-    
-    else:
-        output.error("No shell application defined in global/local config files")
+        return ["windows"]
+    if sys.platform == "darwin":
+        return ["macos", "linux"]
+    return ["linux"]
+
+
+def get_shell_kind(shell_app: str) -> str:
+    name = Path(shell_app).stem.lower()
+    if name in POWERSHELL_APPS:
+        return "powershell"
+    if name in CMD_APPS:
+        return "cmd"
+    return "posix"
+
+
+def get_shell_app_cmd(configs: dict) -> list[str]:
+    shell_configs = configs.get("shell", {})
+    platform_keys = get_shell_platform_keys()
+
+    shell_app = next((shell_configs[key] for key in platform_keys if shell_configs.get(key)), None)
+    if not shell_app:
+        output.error(f"No shell application defined in global/local config files. Set it with: mate config shell:{platform_keys[0]}=<shell> -g")
         globals.exit_mate(globals.ERROR_CODE)
+
+    if shutil.which(shell_app) is None:
+        output.error(f"Shell application not found: {shell_app}")
+        globals.exit_mate(globals.ERROR_CODE)
+
+    kind = get_shell_kind(shell_app)
+    if kind == "powershell":
+        return [shell_app, "-NoProfile", "-Command"]
+    if kind == "cmd":
+        return [shell_app, "/c"]
+    return [shell_app, "-c"]
+
+
+def quote_shell_arg(arg: str, shell_kind: str) -> str:
+    # Only quote args that would otherwise be split or lost, so shell syntax (|, >, $VAR) still works
+    if arg and not any(c.isspace() or c in "'\"" for c in arg):
+        return arg
+
+    if shell_kind == "powershell":
+        return "'" + arg.replace("'", "''") + "'"
+    if shell_kind == "cmd":
+        return '"' + arg.replace('"', '""') + '"'
+    return shlex.quote(arg)
+
+
+def build_shell_command_line(shell_app: str, command: str, args: list[str]) -> str:
+    kind = get_shell_kind(shell_app)
+    return " ".join([command, *(quote_shell_arg(arg, kind) for arg in args)])
 
 
 
 def collect_modules(modules_root_dir: Path, modules_home_dir: Path | None = None) -> dict[str, MateModule]:
-    # Todo: Modify this to be able to work recursively.
-    # Also the collected name should contain root dir as well. eg. git/has_branch.py
+
     modules_path = modules_root_dir / modules_home_dir
     modules_names = sorted(
         p for p in modules_path.rglob("*.py") if p.stem != "__init__"
@@ -96,10 +136,12 @@ def split_csv_args(args: list[list[str]]) -> list[str]:
 
 
 
-def is_globally_callable_command(command_name: str) -> bool:
+def split_csv(value: str) -> list[str]:
+    return [v.strip() for v in value.split(",") if v.strip()]
+
+
+
+def is_callable_executable(command_name: str) -> bool:
     return shutil.which(command_name) != None
 
 
-
-def split_csv(value: str) -> list[str]:
-    return [v.strip() for v in value.split(",") if v.strip()]

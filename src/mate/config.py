@@ -29,7 +29,8 @@ DEFAULT_GLOBAL_CONFIG_CONTENT = {
     "shell":
     {
         "windows" : "powershell",
-        "linux": "/bin/bash"
+        "linux": "/bin/bash",
+        "macos": "/bin/zsh"
     }
 }
 
