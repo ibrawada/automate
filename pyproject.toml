@@ -13,6 +13,12 @@ dependencies = [
     "requests",
     "colorama",
     "tomli-w",
+    "gitpython",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest",
 ]
 
 [project.scripts]
@@ -20,3 +26,14 @@ mate = "mate.main:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["test"]
+pythonpath = ["src"]
+addopts = "-m 'not npp'"
+markers = [
+    "e2e: end-to-end tests that drive mate against a temporary workspace",
+    "git: tests that require git on PATH",
+    "npp: tests that open the real Notepad++ (opt-in: pytest -m npp)",
+    "smoke: tests that run mate as a real subprocess (python -m mate)",
+]

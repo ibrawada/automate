@@ -25,7 +25,11 @@ def initialize_configfiles(commands: dict[str, MateModule]):
             # command_module = importlib.import_module(f".ops.{command}", package="mate")
             config_values = command.module.get_default_config()
             modules_config.update(config_values)
-        config.write_configfile(modules_config, config.get_global_configfile_path(), "a")
+
+        global_config_path = globals.get_global_configfile_path()
+        global_config = config.load_config(global_config_path)
+        config.merge_configs(target_dict=global_config, source_config=modules_config)
+        config.write_configfile(global_config_path, global_config)
 
 
 
