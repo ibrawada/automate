@@ -1,9 +1,8 @@
 import copy
 from pathlib import Path
 
-import pytest
-
 from mate import config
+from mate import config_handling
 from mate import globals
 from mate import main as mate_main
 from mate import utilities
@@ -13,7 +12,7 @@ from .helpers import read_toml, strip_ansi
 
 def expected_global_defaults() -> dict:
     """Global defaults plus the default config sections of every embedded command."""
-    expected = copy.deepcopy(config.DEFAULT_GLOBAL_CONFIG_CONTENT)
+    expected = copy.deepcopy(config_handling.DEFAULT_GLOBAL_CONFIG_CONTENT)
     commands = utilities.collect_modules(Path(globals.__file__).parent, globals.EMBEDDED_COMMANDS_FOLDER)
     utilities.load_modules(commands)
     for command in commands.values():
@@ -31,7 +30,7 @@ def test_first_run_creates_global_and_local_config(run_mate, workspace, global_c
 
     assert result.code == globals.SUCCESS_CODE
     assert read_toml(global_config) == expected_global_defaults()
-    assert read_toml(workspace.local_config) == config.DEFAULT_LOCAL_CONFIG_CONTENT
+    assert read_toml(workspace.local_config) == config_handling.DEFAULT_LOCAL_CONFIG_CONTENT
 
 
 def test_first_run_adds_embedded_command_defaults(run_mate, global_config):
@@ -155,20 +154,19 @@ def test_append_to_list_extends_it_and_is_applied(mate_initialized, workspace, t
     assert not (workspace.root / "dist" / "file.txt").exists()
 
 
-@pytest.mark.xfail(strict=True, reason="override_config_value stores the value as a string instead of a list")
 def test_override_list_replaces_it(mate_initialized, workspace):
     mate_initialized("config", "-o", "folders:exclude=dist")
 
     assert read_toml(workspace.local_config)["folders"]["exclude"] == ["dist"]
 
 
-def test_override_scalar_is_rejected_with_warning(mate_initialized, workspace):
+def test_override_scalar_replaces_it(mate_initialized, workspace):
     mate_initialized("config", "vars:name=foo")
 
     result = mate_initialized("config", "-o", "vars:name=bar")
 
-    assert "[WARNING]" in strip_ansi(result.out)
-    assert read_toml(workspace.local_config)["vars"]["name"] == "foo"
+    assert result.code == globals.SUCCESS_CODE
+    assert read_toml(workspace.local_config)["vars"]["name"] == "bar"
 
 
 def test_invalid_setting_syntax_exits_with_error(mate_initialized, workspace):
@@ -176,12 +174,11 @@ def test_invalid_setting_syntax_exits_with_error(mate_initialized, workspace):
 
     result = mate_initialized("config", "novalue")
 
-    assert result.code == 1
+    assert result.code == globals.ERROR_CODE
     assert "[ERROR]" in strip_ansi(result.out)
     assert read_toml(workspace.local_config) == local_before
 
 
-@pytest.mark.xfail(strict=True, raises=AttributeError, reason="remove_config_entry uses ConfigParser methods on a dict")
 def test_remove_value_from_list(mate_initialized, workspace):
     mate_initialized("config", "-r", "folders:exclude=build")
 

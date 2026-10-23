@@ -77,7 +77,8 @@ def update_configfile(config_path: Path, settings: list[str], args: argparse.Nam
 
     for setting in settings:
         if not config.is_config_entry_syntax_correct(setting):
-            globals.exit_mate(exit_code=globals.ERROR_CODE, message=f"Wrong syntax for the provided setting: {setting}. Always use <section>:<entry>=<value> Syntax")
+            output.error(f"Wrong syntax for the provided setting: {setting}. Always use <section>:<entry>=<value> Syntax")
+            globals.exit_mate(globals.ERROR_CODE)
 
         section, option, value  = config.split_config_entry(setting)
 
@@ -184,8 +185,8 @@ def handle_config_arguments(argv: list[str] | None = None):
             output.info(f"Updating local config file in {config_path}")
         
         update_configfile(config_path, args.settings, args)
-        
-    globals.exit_mate(globals.SUCCESS_CODE)
+
+    return globals.SUCCESS_CODE
 
 
 

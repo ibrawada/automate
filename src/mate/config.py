@@ -93,7 +93,6 @@ def append_value(config_content: dict, section: str, option: str, value: str) ->
 
 
 def override_value(config_object: dict, section: str, option: str, value: str | list[str]) -> dict:
-    # This is only required/valid for option of type list
     existing_value = config_object.get(section).get(option)
 
     if isinstance(existing_value, list):
@@ -112,12 +111,10 @@ def override_value(config_object: dict, section: str, option: str, value: str | 
 def remove_value(config_object: dict, section: str, option: str, value: str) -> dict:
     # Remove section 
     if section != "" and option == "" and value == "":        
-        # config_object.remove_section(section)
         config_object.pop(section)
         
     # Remove the option from config
     elif section != "" and option != "" and value == "":        
-        # config_object.remove_option(section, option)
         config_object[section].pop(option)
         
     # Remove value. This is only applicabale for lists
