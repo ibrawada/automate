@@ -48,18 +48,20 @@ def execute_embedded_command(command_module: MateModule, arguments_and_placehold
         output.error(f"No main() entry point for {command_module}")
         globals.exit_mate(globals.ERROR_CODE)
 
-    command_configs = config_values.get(command_module.path, {})
+    command_configs = config_values.get(command_module.name, {})
+
+    print(f"command configs: {command_configs}")
 
     ret_process_report = []
     for dir in execution_dirs:
         subst_args = resolve_cli_args(arguments_and_placeholders, placeholder_functions, dir)
         
         parser = module.build_parser(
-            argparse.ArgumentParser(prog=f"Help for {command_module.path}")
+            argparse.ArgumentParser(prog=f"Help for {command_module.name}")
         )
         parsed_args = parser.parse_args(subst_args)
         
-        output.info(f"{dir}> {command_module.path} {' '.join(subst_args)}")
+        output.info(f"{dir}> {command_module.name} {' '.join(subst_args)}")
         
         execution_status = module.main(dir, parsed_args, command_configs)
         ret_process_report.append((str(dir), execution_status))

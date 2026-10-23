@@ -8,12 +8,39 @@ from mate import output
 from mate import globals
 from mate.utilities import MateModule
 
+
+
+DEFAULT_LOCAL_CONFIG_CONTENT = {
+    "folders": {
+        "exclude":['build']
+    }
+}
+
+
+DEFAULT_GLOBAL_CONFIG_CONTENT = {
+    "folders": {
+        "exclude":['.mate', '.git']
+    },
+    "executables":
+    {
+
+    },
+    "shell":
+    {
+        "windows" : "powershell",
+        "linux": "/bin/bash",
+        "macos": "/bin/zsh"
+    }
+}
+
+
+
 def initialize_configfiles(commands: dict[str, MateModule]):    
     config_path = globals.get_global_configfile_path()
-    global_config_created = config.create_configfile_if_none(config_path, config.DEFAULT_GLOBAL_CONFIG_CONTENT)
+    global_config_created = config.create_configfile_if_none(config_path, DEFAULT_GLOBAL_CONFIG_CONTENT)
     
     config_path = globals.get_local_configfile_path()
-    config.create_configfile_if_none(config_path, config.DEFAULT_LOCAL_CONFIG_CONTENT)    
+    config.create_configfile_if_none(config_path, DEFAULT_LOCAL_CONFIG_CONTENT)    
 
     # Only populate global config file with default options from embedded commands if the global config was just created
     # TODO: Change the behaviour to check for existance of a section + entry. If not add it, else continue
@@ -21,7 +48,7 @@ def initialize_configfiles(commands: dict[str, MateModule]):
     if global_config_created:
         # For each command write config file default values if nothing yet present
         modules_config = {}
-        for command_name, command in commands.items():
+        for _, command in commands.items():
             # command_module = importlib.import_module(f".ops.{command}", package="mate")
             config_values = command.module.get_default_config()
             modules_config.update(config_values)
@@ -46,21 +73,39 @@ def read_configfiles(configfiles: list[str]) -> dict[str, Any]:
 
 def update_configfile(config_path: Path, settings: list[str], args: argparse.Namespace):
     """Updates a configuration file with new settings."""
-    config_object = config.load_config(config_path)
+    config_content = config.load_config(config_path)
 
     for setting in settings:
-        section, option, value  = config.split_config_entry(setting)
-        
-        if args.append:
-            config.append_config_value(config_object, section, option, value)
-        elif args.remove:
-            config.remove_config_entry(config_object, section, option, value)
-        elif args.override:
-            config.override_config_value(config_object, section, option, value)
-        else:
-            config.append_config_value(config_object, section, option, value)
+        if not config.is_config_entry_syntax_correct(setting):
+            globals.exit_mate(exit_code=globals.ERROR_CODE, message=f"Wrong syntax for the provided setting: {setting}. Always use <section>:<entry>=<value> Syntax")
 
-    config.write_configfile(config_path, config_object)
+        section, option, value  = config.split_config_entry(setting)
+
+        has_section, has_option = config.entry_exists(config_content, section, option)
+
+        if args.remove:
+            if not has_section:
+                output.warning(f"Provided section:{section} was not found in the config. Use mate config --show to list all available config entries")
+                globals.exit_mate(globals.ERROR_CODE)
+            elif option != "" and not has_option:
+                output.warning(f"Provided option:{option} was not found in the config. Use mate config --show to list all available config entries")
+                globals.exit_mate(globals.ERROR_CODE)
+            else:
+                config.remove_value(config_content, section, option, value)
+        
+        elif args.override:
+            if not has_option:
+                config.create_section_and_option_if_none(config_content, section, option, value)            
+            else:
+                config.override_value(config_content, section, option, value)
+        
+        else: # This case handle args.append and no args provided (default = append)
+            if not has_option:
+                config.create_section_and_option_if_none(config_content, section, option, value)
+            else:
+                config.append_value(config_content, section, option, value)
+
+    config.write_configfile(config_path, config_content)
 
 
 
@@ -128,7 +173,7 @@ def handle_config_arguments(argv: list[str] | None = None):
         configs = read_configfiles(configfiles)
         output.info(f"Reading configuration files: {[str(p.resolve()) for p in configfiles]}")
         config.show_config_values(configs)
-        globals.exit_mate(globals.SUCCESS_CODE)
+        
 
     if args.settings:
         if args.global_config:
@@ -140,7 +185,7 @@ def handle_config_arguments(argv: list[str] | None = None):
         
         update_configfile(config_path, args.settings, args)
         
-        return 0
+    globals.exit_mate(globals.SUCCESS_CODE)
 
 
 

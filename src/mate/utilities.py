@@ -13,6 +13,7 @@ from mate import globals
     
 @dataclass(kw_only=True)
 class MateModule:
+    name: str = ""
     path: str = "" # encoded as folder.[root].module_name
     module: ModuleType | None = None 
 
@@ -90,7 +91,7 @@ def collect_modules(modules_root_dir: Path, modules_home_dir: Path | None = None
     for module in modules_names:
         module_path = ".".join(module.relative_to(modules_root_dir).with_suffix("").parts)
         module_name = ".".join(module.relative_to(modules_root_dir / modules_home_dir).with_suffix("").parts)
-        ret_modules[module_name] = MateModule(path=module_path)
+        ret_modules[module_name] = MateModule(name=module_name, path=module_path)
     
     return ret_modules
 

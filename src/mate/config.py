@@ -10,32 +10,6 @@ from mate import output
 
 
 
-
-DEFAULT_LOCAL_CONFIG_CONTENT = {
-    "folders": {
-        "exclude":['build']
-    }
-}
-
-
-DEFAULT_GLOBAL_CONFIG_CONTENT = {
-    "folders": {
-        "exclude":['.mate', '.git']
-    },
-    "executables":
-    {
-
-    },
-    "shell":
-    {
-        "windows" : "powershell",
-        "linux": "/bin/bash",
-        "macos": "/bin/zsh"
-    }
-}
-
-
-
 def load_config(path: str) -> dict:
     with open(path, "rb") as file:
         return tomllib.load(file)
@@ -61,24 +35,48 @@ def create_configfile_if_none(configfile_path: Path, config_content: dict) -> bo
 
 
 
-def create_section_and_option_if_none(config_content: dict, section: str, option: str, value: str) -> bool:
-    # If no section -> create section
+def entry_exists(config_content: dict, section: str, option: str) -> tuple[bool, bool]:
+    """
+    Checks whether a section and an option within it exist in the config.
+    Returns a tuple (has_section, has_option):
+    - has_section: True if the section exists in the config
+    - has_option: True if the option exists within that section
+    (always False if the section does not exist)
+    """
+    # No section -> Also no option 
     if section not in config_content:
+        return (False, False)
+
+    # Section exists but not the option
+    if option not in config_content[section]:
+        return (True, False)
+
+    # When both exist
+    return (True, True)
+
+
+
+def create_section_and_option_if_none(config_content: dict, section: str, option: str, value: str) -> bool:
+    has_section, has_option = entry_exists(config_content, section, option)
+
+    # If no section -> create section
+    if not has_section:
         config_content[section] = {}
 
     # If no option -> create option and exit
-    if option not in config_content[section]:
+    if not has_option:
         config_content[section][option] = value
         return True
     else:
         return False
 
 
-def append_config_value(config_content: dict, section: str, option: str, value: str) -> dict:    
-
-    was_created = create_section_and_option_if_none(config_content, section, option, value)
-    if was_created:
-        return config_content
+# pre-condition:
+# - Section and option with value(s) must exist
+def append_value(config_content: dict, section: str, option: str, value: str) -> dict:
+    # was_created = create_section_and_option_if_none(config_content, section, option, value)
+    # if was_created:
+    #     return config_content
     
     existing_value = config_content.get(section).get(option)
 
@@ -94,51 +92,45 @@ def append_config_value(config_content: dict, section: str, option: str, value: 
 
 
 
-def override_config_value(config_object: dict, section: str, option: str, value: str) -> dict:
-
-    option_created = create_section_and_option_if_none(config_object, section, option, value)
-    if option_created:
-        return config_object
-    
+def override_value(config_object: dict, section: str, option: str, value: str | list[str]) -> dict:
     # This is only required/valid for option of type list
     existing_value = config_object.get(section).get(option)
 
     if isinstance(existing_value, list):
-        config_object[section][option] = value
+        if isinstance(value, list):
+            config_object[section][option] = value
+        else: # Create a list from given value string
+            config_object[section][option] = [value]
     else:
-        output.warning("Cannot override a value because the option: {section}{option} is not of type list")
+        config_object[section][option] = value
     
 
     return config_object
 
 
 
-def remove_config_entry(config_object: dict, section: str, option: str, value: str) -> dict:
-    # Check whether the section and option exist
-    # If only section provided -> remove the whole section
-    config_has_section = section in config_object
-    config_has_option = option in config_object.get(section, {})
-    
+def remove_value(config_object: dict, section: str, option: str, value: str) -> dict:
     # Remove section 
-    if section != "" and option == "" and value == "":
-        if config_has_section:
-            config_object.remove_section(section)
-        else:    
-            output.warning("Config has no section called {section}")
-            return config_object
+    if section != "" and option == "" and value == "":        
+        # config_object.remove_section(section)
+        config_object.pop(section)
+        
     # Remove the option from config
-    elif section != "" and option != "" and value == "":
-        if config_has_option:
-            config_object.remove_option(section, option)
-        else:
-            output.warning("Config has no section / option called {section}:{option}")
-            return config_object
+    elif section != "" and option != "" and value == "":        
+        # config_object.remove_option(section, option)
+        config_object[section].pop(option)
+        
     # Remove value. This is only applicabale for lists
     elif section != "" and option != "" and value != "":
         existing_value = config_object[section][option]
         if isinstance(existing_value, list):
-            existing_value.remove(value)
-            config_object.set(section, option, str(existing_value))
+            if isinstance(value, list):
+                for val in value:
+                    existing_value.remove(val)
+            else:
+                existing_value.remove(value)
+
+            config_object[section][option] = existing_value
         else:
             output.warning("Nothing has been removed. The provided syntax is only allowed for list type options")
     else:
@@ -146,18 +138,17 @@ def remove_config_entry(config_object: dict, section: str, option: str, value: s
 
     return config_object
 
-    
 
+
+def is_config_entry_syntax_correct(config_entry: str) -> bool:
+    if not ":" in config_entry or not "=" in config_entry:        
+        return False
+    return True
+
+
+# Pre-condition
+# - Syntax of the entry is correct
 def split_config_entry(config_entry: str) -> tuple[str, str, str]:
-    section = ""
-    option = ""
-    value = ""
-
-    # Perform error checks
-    if not ":" in config_entry or not "=" in config_entry:
-        output.error(f"Wrong syntax for the provided setting: {config_entry}. Always use <section>:<entry>=<value> Syntax")
-        sys.exit(1)
-
     section, option_value = config_entry.split(':', 1)
     option, value = option_value.split('=', 1)
 

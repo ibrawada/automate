@@ -157,18 +157,23 @@ def main(cwd: Path, args, env: dict) -> int:
     """
     Executes the gitea operation based on parsed arguments.
     """
-    if HOST not in env or TOKEN not in env:
+    # env is already the [gitea] section of the config
+    host = env.get(HOST, "")
+    token = env.get(TOKEN, "")
+
+    # Both must be present and non-empty (the default config defines them as "")
+    if not host or not token:
         output.error(f"'{HOST}' and '{TOKEN}' must be defined in the [{COMMAND_NAME}] section of your config.")
         return globals.ERROR_CODE
-    
+
     if args.action == "create-pr":
         pr_status = create_pull_request(
-           cwd, env[HOST], env[TOKEN], args.title, args.target_branch, args.source_branch
+           cwd, host, token, args.title, args.target_branch, args.source_branch
         )
         return pr_status
     elif args.action == "merge-pr":
         merge_status = merge_pull_request(
-            cwd, env[HOST], env[TOKEN], args.from_branch, 
+            cwd, host, token, args.from_branch,
             args.delete_branch, args.merge_method 
         )
         return merge_status
