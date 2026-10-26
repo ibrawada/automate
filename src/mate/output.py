@@ -27,17 +27,24 @@ def error(message: str):
 
 
 
+# Command output is indented so it can be told apart from the folder lines
+def _print_details(details: str):
+    for line in details.splitlines():
+        print(f"    {line}")
+
+
+
 def status_report(report: list[ExecutionResult]):
     print(Fore.BLUE + "[REPORT]")
     for result in report:
-        if result.returncode == globals.SUCCESS_CODE:        
-            print(Fore.GREEN + f"{result.cwd}")# dir 
+        if result.returncode == globals.SUCCESS_CODE:
+            print(Fore.GREEN + f"{result.cwd}")
         elif result.returncode == globals.WARNING_CODE:
-            print(Fore.YELLOW + f"{result.cwd}")
-            print(f"{result.stdout}")
+            print(Fore.YELLOW + f"{result.cwd}({result.returncode})")
+            _print_details(result.stdout)
         else:
-            print(Fore.RED + f"{result.cwd}")
-            print(f"{result.stderr}")
+            print(Fore.RED + f"{result.cwd}({result.returncode})")
+            _print_details(result.stderr)
 
 
 
@@ -46,7 +53,7 @@ def suggest_retry(report: list[ExecutionResult]):
     retry_folders = []
     for result in report:
         if result.returncode != globals.SUCCESS_CODE:
-            retry_folders.append(dir)
+            retry_folders.append(str(result.cwd))
 
     if len(retry_folders) != 0:
         message += ','.join(retry_folders)

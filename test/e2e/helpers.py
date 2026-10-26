@@ -23,18 +23,29 @@ def strip_ansi(text: str) -> str:
 
 
 def parse_report(out: str) -> dict[str, int]:
-    """Parses the line printed by output.status_report: "[REPORT] <dir>, <dir>(<status>), " """
+    """Parses the block printed by output.status_report:
+
+    [REPORT]
+    <dir>
+    <dir>(<status>)
+        <indented command output>
+    """
     report = {}
+    in_report = False
     for line in strip_ansi(out).splitlines():
-        if not line.startswith("[REPORT]"):
+        if line.startswith("[REPORT]"):
+            in_report = True
             continue
-        for entry in line.removeprefix("[REPORT]").split(","):
-            entry = entry.strip()
-            if not entry:
-                continue
-            match = REPORT_ENTRY.match(entry)
-            status = int(match["status"]) if match["status"] else 0
-            report[Path(match["dir"]).name] = status
+        if not in_report:
+            continue
+        if line.startswith("["):
+            in_report = False
+            continue
+        if not line.strip() or line.startswith(" "):
+            continue
+        match = REPORT_ENTRY.match(line.strip())
+        status = int(match["status"]) if match["status"] else 0
+        report[Path(match["dir"]).name] = status
     return report
 
 
