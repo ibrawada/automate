@@ -1,7 +1,7 @@
 import argparse
-import importlib
+
 import subprocess
-import shutil
+
 from pathlib import Path
 from typing import Any
 
@@ -10,6 +10,38 @@ from mate.utilities import MateModule
 from mate import placeholderslib
 from mate.placeholderslib import Node
 from mate import globals
+
+
+from dataclasses import dataclass
+from enum import Enum
+from pathlib import Path
+import subprocess
+import sys
+import threading
+
+
+class ExecutorType(Enum):
+    APPLICATION = "application"
+    SHELL = "shell"
+    EMBEDDED = "embedded"
+
+
+@dataclass
+class ExecutionResult:
+    command: list[str]
+    cwd: Path
+    executor: ExecutorType
+
+    returncode: int
+    stdout: str = ""
+    stderr: str = ""
+    exception: Exception | None = None
+
+    @property
+    def succeeded(self) -> bool:
+        return self.exception is None and self.returncode == 0
+
+
 
 
 def resolve_cli_args(arguments_and_placeholders: dict[str, list[Node]], placeholder_functions: dict[str, MateModule], execution_dir: Path) -> list[str]:
@@ -25,20 +57,97 @@ def resolve_cli_args(arguments_and_placeholders: dict[str, list[Node]], placehol
 
 
 
-def run_application(application: str, cmd: list[str], execution_dir: Path, check: bool = True) -> int:
-    full_cmd = [application]
-    full_cmd.extend(cmd)
+# def run_application(application: str, cmd: list[str], execution_dir: Path, check: bool = True) -> int:
+#     full_cmd = [application]
+#     full_cmd.extend(cmd)
 
-    output.info(f"{str(execution_dir.resolve())}> {' '.join(full_cmd)}")
+#     output.info(f"{str(execution_dir.resolve())}> {' '.join(full_cmd)}")
+
+#     try:
+#         completed = subprocess.run(full_cmd, cwd=execution_dir, check=check)
+#         return completed.returncode
+#     except FileNotFoundError as e:
+#         output.error(f"command not found: {full_cmd[0]}\n{e}")
+#         return globals.ERROR_CODE
+#     except subprocess.CalledProcessError as e:
+#         return e.returncode
+
+
+
+
+def run_application(
+    application: str,
+    cmd: list[str],
+    execution_dir: Path,
+    live_output: bool = True,
+) -> ExecutionResult:
+
+    full_cmd = [application, *cmd]
+
+    output.info(
+        f"{execution_dir.resolve()}> {' '.join(full_cmd)}"
+    )
 
     try:
-        completed = subprocess.run(full_cmd, cwd=execution_dir, check=check)
-        return completed.returncode
-    except FileNotFoundError as e:
-        output.error(f"command not found: {full_cmd[0]}\n{e}")
-        return globals.ERROR_CODE
-    except subprocess.CalledProcessError as e:
-        return e.returncode
+        process = subprocess.Popen(
+            full_cmd,
+            cwd=execution_dir,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            errors="replace",
+            bufsize=1,
+        )
+
+        stdout_lines: list[str] = []
+        stderr_lines: list[str] = []
+
+        def read_stream(stream, collected, target):
+            for line in iter(stream.readline, ""):
+                collected.append(line)
+
+                if live_output:
+                    print(line, end="", file=target, flush=True)
+
+            stream.close()
+
+        stdout_thread = threading.Thread(
+            target=read_stream,
+            args=(process.stdout, stdout_lines, sys.stdout),
+        )
+
+        stderr_thread = threading.Thread(
+            target=read_stream,
+            args=(process.stderr, stderr_lines, sys.stderr),
+        )
+
+        stdout_thread.start()
+        stderr_thread.start()
+
+        returncode = process.wait()
+
+        stdout_thread.join()
+        stderr_thread.join()
+
+        return ExecutionResult(
+            command=full_cmd, # Split into command name and arguments
+            cwd=execution_dir,
+            executor=ExecutorType.APPLICATION,
+            returncode=returncode,
+            stdout="".join(stdout_lines),
+            stderr="".join(stderr_lines),
+        )
+
+    except OSError as e:
+        return ExecutionResult(
+            command=full_cmd,
+            cwd=execution_dir,
+            executor=ExecutorType.APPLICATION,
+            returncode=globals.ERROR_CODE,
+            stderr=str(e),
+            exception=e,
+        )
+
 
 
 # This runs the python operations (not git, or notepad)
