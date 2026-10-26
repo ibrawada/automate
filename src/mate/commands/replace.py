@@ -5,7 +5,15 @@ import sys
 from pathlib import Path
 
 from mate import globals
-from mate import output
+from mate.executors import ExecutionResult, ExecutorType
+
+
+# Todo: Rename to file-manip and refactor the arguments
+
+def result(cwd, returncode: int, stdout: str = "", stderr: str = "") -> ExecutionResult:
+    return ExecutionResult(command_name="replace", command_args=[], cwd=Path(cwd), executor=ExecutorType.EMBEDDED,
+                           returncode=returncode, stdout=stdout, stderr=stderr)
+
 
 def build_parser(p: argparse.ArgumentParser) -> argparse.ArgumentParser:
     p.add_argument("-f", "--file", required=True, help="Path to file")
@@ -19,7 +27,7 @@ def build_parser(p: argparse.ArgumentParser) -> argparse.ArgumentParser:
 
 
 
-def main(cwd, args, env: dict) -> int:
+def main(cwd, args, env: dict) -> ExecutionResult:
     path = Path(cwd) / Path(args.file)
     old_text = path.read_text(encoding="utf-8")
 
@@ -43,11 +51,10 @@ def main(cwd, args, env: dict) -> int:
         if text_line_found:
             new_text = old_text.replace(input_text_line, new_line)
         else:
-            output.warning(f"Line to be replaced was not found. Provided: {args.new_line}")
-            return globals.ERROR_CODE
-    path.write_text(new_text, encoding="utf-8")    
-    return globals.SUCCESS_CODE
+            return result(cwd, globals.ERROR_CODE, stderr=f"Line to be replaced was not found. Provided: {args.new_line}")
 
+    path.write_text(new_text, encoding="utf-8")
+    return result(cwd, globals.SUCCESS_CODE, stdout=f"Replacement successful in: {args.file}")
 
 
 def get_default_config() -> dict:

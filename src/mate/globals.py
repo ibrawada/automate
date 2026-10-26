@@ -2,9 +2,10 @@ import sys
 import os
 from pathlib import Path
 
-# from mate import output
+from mate import output
 
 ERROR_CODE = 127
+WARNING_CODE = 1
 SUCCESS_CODE = 0
 
 
@@ -47,4 +48,7 @@ def get_local_configfile_path() -> Path:
 
 def exit_mate(exit_code: int = SUCCESS_CODE, message: str = ""):
     # Todo, maybe logging here for the function in which error occured
+    if message:
+        output.error(message)
+        
     sys.exit(exit_code)

@@ -8,7 +8,7 @@ from pathlib import Path
 
 from mate import globals
 from mate import output
-
+from mate.executors import ExecutionResult, ExecutorType
 
 COMMAND_NAME = "gitea" 
 HOST = "host"
@@ -38,7 +38,8 @@ def get_git_info(path: Path) -> dict | None:
         or None if it's not a git repository or info can't be found.
     """
     if not (path / ".git").is_dir():
-        globals.exit_mate(globals.ERROR_CODE, "get_git_info: Path is not a valid git repo")
+        # globals.exit_mate(globals.ERROR_CODE, "get_git_info: Path is not a valid git repo")
+        return {}
 
     try:
         # Get current branch
@@ -75,19 +76,29 @@ def construct_headers(token: str):
 
 
 
-def create_pull_request(cwd: Path, gitea_url, gitea_PAT, title, target_branch, source_branch = None) -> int:
+def result(cwd, returncode: int, stdout: str = "", stderr: str = "") -> ExecutionResult:
+    return ExecutionResult(command_name=COMMAND_NAME, command_args=[], cwd=Path(cwd), executor=ExecutorType.EMBEDDED,
+                           returncode=returncode, stdout=stdout, stderr=stderr)
+
+
+
+def create_pull_request(cwd: Path, gitea_url, gitea_PAT, title, target_branch, source_branch = None) -> ExecutionResult:
     # Gather git information on the currently processed folder
-    gitea_info = get_git_info(cwd)
+    dir_git_info = get_git_info(cwd)
+
+    if dir_git_info == {}:
+        return result(cwd, globals.ERROR_CODE, "", f"Provided path: {cwd} is not a valid git repo")
 
     if source_branch is None:
-        source_branch = gitea_info["branch"]
+        source_branch = dir_git_info["branch"]
 
     # construct the url of the request
     # https://docs.gitea.com/api/1.24/#tag/repository/operation/repoCreatePullRequest
-    url = f'{gitea_url}/api/v1/repos/{gitea_info["owner"]}/{gitea_info["repo"]}/pulls'
+    url = f'{gitea_url}/api/v1/repos/{dir_git_info["owner"]}/{dir_git_info["repo"]}/pulls'
 
     # construct the header of the request
     headers = construct_headers(gitea_PAT)
+    
     # construct the data of the request
     data = {
         'title': title,
@@ -98,22 +109,26 @@ def create_pull_request(cwd: Path, gitea_url, gitea_PAT, title, target_branch, s
     response = requests.post(url, headers=headers, json=data)
 
     if response.status_code != 201:
-        output.error(f"[gitea:merge-pr] No Pull-Request could be created from: {source_branch} to: {target_branch}\nReason: {response.reason}")
-        return globals.ERROR_CODE
+        return result(cwd, globals.ERROR_CODE,
+                      stderr=f"[gitea:create-pr] No Pull-Request could be created from: {source_branch} to: {target_branch}\nReason: {response.reason}")
 
-    return globals.SUCCESS_CODE
+    return result(cwd, globals.SUCCESS_CODE)
 
 
-def merge_pull_request(cwd: Path, gitea_url, gitea_PAT, from_branch: str | None,  delete_branch = False,  merge_method = "merge") -> int:
+def merge_pull_request(cwd: Path, gitea_url, gitea_PAT, from_branch: str | None,  delete_branch = False,  merge_method = "merge") -> ExecutionResult:
     # Gather git information on the currently processed folder
-    git_info = get_git_info(cwd)
+    dir_git_info = get_git_info(cwd)
+
+    if dir_git_info == {}:
+        return result(cwd, globals.ERROR_CODE, "", f"Provided path: {cwd} is not a valid git repo")
+        
     if from_branch is None:
-        from_branch = git_info["branch"]
+        from_branch = dir_git_info["branch"]
 
 
     # Get all pull requests for the repo
     # https://docs.gitea.com/api/1.24/#tag/repository/operation/repoListPullRequests
-    prs_url = f'{gitea_url}/api/v1/repos/{git_info["owner"]}/{git_info["repo"]}/pulls'
+    prs_url = f'{gitea_url}/api/v1/repos/{dir_git_info["owner"]}/{dir_git_info["repo"]}/pulls'
     data = {'state': "open" }
     headers = construct_headers(gitea_PAT)
     prs_response = requests.get(prs_url, headers=headers, json=data)
@@ -124,36 +139,40 @@ def merge_pull_request(cwd: Path, gitea_url, gitea_PAT, from_branch: str | None,
     for pr in prs:
         if pr["head"]["ref"] == from_branch:
             pr_index = pr["number"]
-            output.info(f'[gitea:merge-pr] Pull Request from {from_branch} to {pr["base"]["ref"]} has index: {pr_index} ')
+            #output.info(f'[gitea:merge-pr] Pull Request from {from_branch} to {pr["base"]["ref"]} has index: {pr_index} ')
             break
         
     
     if pr_index != -1:
         # construct the url of the 
-        url = f'{gitea_url}/api/v1/repos/{git_info["owner"]}/{git_info["repo"]}/pulls/{pr_index}/merge'
+        url = f'{gitea_url}/api/v1/repos/{dir_git_info["owner"]}/{dir_git_info["repo"]}/pulls/{pr_index}/merge'
+
         # construct the header of the request
         headers = construct_headers(gitea_PAT)
+
         # construct the data of the request
         data = {
             'Do': merge_method,
             'delete_branch_after_merge': delete_branch,
         }
+
         # call the api by providing the url, header, and data
         # https://docs.gitea.com/api/1.24/#tag/repository/operation/repoPullRequestIsMerged
         response = requests.post(url, headers=headers, json=data)
+
         # return the response of the api
-        # print(f"responce:\n {response}")
         if response.status_code >= 300:
-            output.error(f"[gitea:merge-pr] Pull-Request from: {from_branch} with index:{pr_index} cannot be merged. Reason: {response.reason}")
-            return globals.ERROR_CODE
-        return globals.SUCCESS_CODE
+            return result(cwd, globals.ERROR_CODE,
+                          stderr=f"[gitea:merge-pr] Pull-Request from: {from_branch} with index:{pr_index} cannot be merged. Reason: {response.reason}")
+        # Else: success 
+        return result(cwd, globals.SUCCESS_CODE)
     else:
-        output.warning(f"[gitea:merge-pr] No pull request found for provided from-branch: {from_branch}")
-        return globals.ERROR_CODE
+        return result(cwd, globals.WARNING_CODE,
+                      stderr=f"[gitea:merge-pr] No pull request found for provided from-branch: {from_branch}")
 
 
 
-def main(cwd: Path, args, env: dict) -> int:
+def main(cwd: Path, args, env: dict) -> ExecutionResult:
     """
     Executes the gitea operation based on parsed arguments.
     """
@@ -163,8 +182,8 @@ def main(cwd: Path, args, env: dict) -> int:
 
     # Both must be present and non-empty (the default config defines them as "")
     if not host or not token:
-        output.error(f"'{HOST}' and '{TOKEN}' must be defined in the [{COMMAND_NAME}] section of your config.")
-        return globals.ERROR_CODE
+        return result(cwd, globals.ERROR_CODE,
+                      stderr=f"'{HOST}' and '{TOKEN}' must be defined in the [{COMMAND_NAME}] section of your config.")
 
     if args.action == "create-pr":
         pr_status = create_pull_request(
@@ -178,8 +197,8 @@ def main(cwd: Path, args, env: dict) -> int:
         )
         return merge_status
     else:
-        output.error(f"Unknown gitea action '{args.action}'")
-        return globals.ERROR_CODE
+        # Todo: When encountering an error_code mate shall probabyl quit/abort execution.
+        return result(cwd, globals.ERROR_CODE, stderr=f"Unknown gitea action '{args.action}'")
     
 
 

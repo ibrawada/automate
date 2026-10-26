@@ -41,7 +41,19 @@ def get_shell_kind(shell_app: str) -> str:
     return "posix"
 
 
-def get_shell_app_cmd(configs: dict) -> list[str]:
+# Todo: Refactor this to be part of the config file
+def get_shell_app_arguments(shell_app_name: str) -> list[str]:
+    kind = get_shell_kind(shell_app_name)
+    if kind == "powershell":
+        return ["-NoProfile", "-Command"]
+    elif kind == "cmd":
+        return ["/c"]
+    else:
+        return ["-c"]
+
+
+
+def get_shell_app_cmd(configs: dict) -> str:
     shell_configs = configs.get("shell", {})
     platform_keys = get_shell_platform_keys()
 
@@ -54,12 +66,8 @@ def get_shell_app_cmd(configs: dict) -> list[str]:
         output.error(f"Shell application not found: {shell_app}")
         globals.exit_mate(globals.ERROR_CODE)
 
-    kind = get_shell_kind(shell_app)
-    if kind == "powershell":
-        return [shell_app, "-NoProfile", "-Command"]
-    if kind == "cmd":
-        return [shell_app, "/c"]
-    return [shell_app, "-c"]
+    return str(shell_app)
+
 
 
 def quote_shell_arg(arg: str, shell_kind: str) -> str:

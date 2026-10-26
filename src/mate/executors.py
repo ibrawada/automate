@@ -28,7 +28,8 @@ class ExecutorType(Enum):
 
 @dataclass
 class ExecutionResult:
-    command: list[str]
+    command_name: str
+    command_args: list[str]
     cwd: Path
     executor: ExecutorType
 
@@ -44,7 +45,10 @@ class ExecutionResult:
 
 
 
-def resolve_cli_args(arguments_and_placeholders: dict[str, list[Node]], placeholder_functions: dict[str, MateModule], execution_dir: Path) -> list[str]:
+def resolve_cli_args(arguments_and_placeholders: dict[str, list[Node]], 
+                     placeholder_functions: dict[str, MateModule], 
+                     execution_dir: Path) -> list[str]:
+    
     subst_args = []
     for arg, pcs in arguments_and_placeholders.items():
         if  pcs:
@@ -57,32 +61,14 @@ def resolve_cli_args(arguments_and_placeholders: dict[str, list[Node]], placehol
 
 
 
-# def run_application(application: str, cmd: list[str], execution_dir: Path, check: bool = True) -> int:
-#     full_cmd = [application]
-#     full_cmd.extend(cmd)
-
-#     output.info(f"{str(execution_dir.resolve())}> {' '.join(full_cmd)}")
-
-#     try:
-#         completed = subprocess.run(full_cmd, cwd=execution_dir, check=check)
-#         return completed.returncode
-#     except FileNotFoundError as e:
-#         output.error(f"command not found: {full_cmd[0]}\n{e}")
-#         return globals.ERROR_CODE
-#     except subprocess.CalledProcessError as e:
-#         return e.returncode
-
-
-
-
 def run_application(
     application: str,
-    cmd: list[str],
+    arguments: list[str],
     execution_dir: Path,
     live_output: bool = True,
 ) -> ExecutionResult:
 
-    full_cmd = [application, *cmd]
+    full_cmd = [application, *arguments]
 
     output.info(
         f"{execution_dir.resolve()}> {' '.join(full_cmd)}"
@@ -130,7 +116,8 @@ def run_application(
         stderr_thread.join()
 
         return ExecutionResult(
-            command=full_cmd, # Split into command name and arguments
+            command_name=application,
+            command_args=arguments,
             cwd=execution_dir,
             executor=ExecutorType.APPLICATION,
             returncode=returncode,
@@ -139,8 +126,10 @@ def run_application(
         )
 
     except OSError as e:
+        output.error(f"command not found: {application}\n{e}")
         return ExecutionResult(
-            command=full_cmd,
+            command_name=application,
+            command_args=arguments,
             cwd=execution_dir,
             executor=ExecutorType.APPLICATION,
             returncode=globals.ERROR_CODE,
@@ -150,16 +139,27 @@ def run_application(
 
 
 
+# # Embedded commands do not stream their output, so it is printed once they return
+# def report_embedded_result(result: ExecutionResult):
+#     if result.stdout:
+#         output.info(result.stdout)
+#     if result.stderr:
+#         if result.returncode == globals.WARNING_CODE:
+#             output.warning(result.stderr)
+#         else:
+#             output.error(result.stderr)
+
+
+
 # This runs the python operations (not git, or notepad)
-def execute_embedded_command(command_module: MateModule, arguments_and_placeholders: dict[str, list[Node]], placeholder_functions: dict[str, MateModule], config_values: dict[str, Any], execution_dirs: list[Path]) -> list[(str, int)]:
+def execute_embedded_command(command_module: MateModule, arguments_and_placeholders: dict[str, list[Node]], 
+                             placeholder_functions: dict[str, MateModule], config_values: dict[str, Any], 
+                             execution_dirs: list[Path]) -> list[ExecutionResult]:
     module = command_module.module
     if not hasattr(module, "main"):
-        output.error(f"No main() entry point for {command_module}")
-        globals.exit_mate(globals.ERROR_CODE)
+        globals.exit_mate(globals.ERROR_CODE, f"No main() entry point for {command_module}")
 
     command_configs = config_values.get(command_module.name, {})
-
-    print(f"command configs: {command_configs}")
 
     ret_process_report = []
     for dir in execution_dirs:
@@ -173,27 +173,34 @@ def execute_embedded_command(command_module: MateModule, arguments_and_placehold
         output.info(f"{dir}> {command_module.name} {' '.join(subst_args)}")
         
         execution_status = module.main(dir, parsed_args, command_configs)
-        ret_process_report.append((str(dir), execution_status))
+
+        ret_process_report.append(execution_status)
 
     return ret_process_report
 
 
 
 # This runs the notepad (not python ops and not git)
-def execute_config_application(application: str, arguments_and_placeholders: dict[str, list[Node]], placeholder_functions: dict[str, MateModule], config_values: dict[str, Any], execution_dirs: list[Path]) -> list[(str, int)]:
+def execute_config_application(application: str, arguments_and_placeholders: dict[str, list[Node]], 
+                               placeholder_functions: dict[str, MateModule], config_values: dict[str, Any], 
+                               execution_dirs: list[Path]) -> list[ExecutionResult]:
     ret_process_report = []
     for dir in execution_dirs:        
         subst_args = resolve_cli_args(arguments_and_placeholders, placeholder_functions, dir)
         execution_status = run_application(application, [*subst_args], execution_dir=dir)
-        ret_process_report.append((str(dir), execution_status))
+
+        ret_process_report.append(execution_status)
 
     return ret_process_report
 
 
 
-def execute_shell_command(shell_command: str, arguments_and_placeholders: dict[str, list[Node]],placeholder_functions: dict[str, MateModule], config_values: dict[str, Any], execution_dirs: list[Path]) -> list[tuple[str, int]]:
-    shell_app_command = utilities.get_shell_app_cmd(config_values)
-    shell_app = shell_app_command[0]
+def execute_shell_command(shell_command: str, arguments_and_placeholders: dict[str, list[Node]], 
+                          placeholder_functions: dict[str, MateModule], config_values: dict[str, Any], 
+                          execution_dirs: list[Path]) -> list[tuple[str, ExecutionResult]]:
+    
+    shell_app_name = utilities.get_shell_app_cmd(config_values) # eg = powershell
+    shell_app_arguments = utilities.get_shell_app_arguments(shell_app_name) # eg = -NoProfile -Command
 
     ret_process_report = []
 
@@ -201,27 +208,26 @@ def execute_shell_command(shell_command: str, arguments_and_placeholders: dict[s
         subst_args = resolve_cli_args(arguments_and_placeholders, placeholder_functions, current_dir)
 
         # The shell takes the whole command as one string; extra argv items would not be part of it (e.g. bash -c)
-        command_line = utilities.build_shell_command_line(shell_app, shell_command, subst_args)
-        shell_cmd = [*shell_app_command, command_line]
+        command_line = utilities.build_shell_command_line(shell_app_name, shell_command, subst_args)
+        shell_cmd = [*shell_app_arguments, command_line]
 
-        output.info(f"{str(Path(current_dir).resolve())}> {command_line}")
-        try:
-            run_status = subprocess.run(shell_cmd, cwd=current_dir, text=True)
-            ret_process_report.append((str(current_dir), run_status.returncode))
-        except OSError as e:
-            output.error(f"Failed to run shell {shell_app}: {e}")
-            ret_process_report.append((str(current_dir), globals.ERROR_CODE))
+
+        execution_status = run_application(shell_app_name, shell_cmd, current_dir)
+        ret_process_report.append(execution_status)
 
     return ret_process_report
 
 
 
-def execute_global_application(application: str, arguments_and_placeholders: dict[str, list[Node]],placeholder_functions: dict[str, MateModule], config_values: dict[str, Any], execution_dirs: list[Path]) -> int:
+def execute_global_application(application: str, arguments_and_placeholders: dict[str, list[Node]], 
+                               placeholder_functions: dict[str, MateModule], config_values: dict[str, Any], 
+                               execution_dirs: list[Path]) -> list[ExecutionResult]:
     ret_process_report = []
 
     for dir in execution_dirs:
         subst_args = resolve_cli_args(arguments_and_placeholders, placeholder_functions, dir)
-        execution_status = run_application(application, subst_args, execution_dir=dir, check=False)
-        ret_process_report.append((str(dir), execution_status))
+        execution_status = run_application(application, subst_args, execution_dir=dir)
+
+        ret_process_report.append(execution_status)
 
     return ret_process_report
